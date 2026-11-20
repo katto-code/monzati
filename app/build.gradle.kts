@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.supabase.auth)
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.realtime)
+    implementation(libs.supabase.storage)
     implementation(libs.ktor.client.android)
 
     // Probador con cámara: vista previa + detección de pose en el dispositivo.
@@ -81,6 +82,10 @@ dependencies {
     implementation(libs.camerax.view)
     implementation(libs.camerax.mlkit)
     implementation(libs.mlkit.pose)
+    // Digitalización de prendas: detección, recorte de fondo y etiquetas, todo en el dispositivo.
+    implementation(libs.mlkit.segmentation)
+    implementation(libs.mlkit.objects)
+    implementation(libs.mlkit.labeling)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -55,6 +55,7 @@ import com.monzatti.app.core.theme.MonzattiTheme
 import com.monzatti.app.domain.tryon.TryOnItem
 import com.monzatti.app.domain.tryon.TryOnSource
 import com.monzatti.app.ui.components.PrimaryButton
+import com.monzatti.app.ui.components.rememberImageFile
 import com.monzatti.app.ui.components.ScreenColumn
 import com.monzatti.app.ui.components.SecondaryButton
 import com.monzatti.app.ui.components.Title
@@ -107,6 +108,7 @@ private fun TryOnCamera(onBack: () -> Unit, onOpenMirror: () -> Unit, viewModel:
     var windowStart by remember { mutableLongStateOf(System.nanoTime()) }
 
     var drag by remember { mutableFloatStateOf(0f) }
+    val garmentPhoto = rememberImageFile(selected?.imagePath)
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (!cameraMissing) {
@@ -146,7 +148,10 @@ private fun TryOnCamera(onBack: () -> Unit, onOpenMirror: () -> Unit, viewModel:
         ) {
             val f = frame
             val item = selected
-            if (f != null && item != null) drawGarment(f, item.kind, Color(item.color))
+            val photo = garmentPhoto
+            if (f != null && item != null) {
+                if (photo != null) drawGarmentImage(f, item.kind, photo) else drawGarment(f, item.kind, Color(item.color))
+            }
         }
 
         // Barra superior

@@ -39,7 +39,9 @@ data class TryOnItem(
     /** Color ARGB. */
     val color: Long,
     val source: TryOnSource,
-    val price: Int? = null
+    val price: Int? = null,
+    /** Foto recortada de la prenda; si existe, el probador la usa en lugar del dibujo. */
+    val imagePath: String? = null
 )
 
 fun Product.toTryOnItem(): TryOnItem? = GarmentKind.from(category, name)?.let { kind ->
@@ -47,7 +49,7 @@ fun Product.toTryOnItem(): TryOnItem? = GarmentKind.from(category, name)?.let { 
 }
 
 fun Garment.toTryOnItem(): TryOnItem? = GarmentKind.from(category, name)?.let { kind ->
-    TryOnItem(id, name, "Mi closet", kind, GarmentColors.resolve(color), TryOnSource.CLOSET)
+    TryOnItem(id, name, "Mi closet", kind, GarmentColors.resolve(color), TryOnSource.CLOSET, imagePath = imagePath)
 }
 
 /** Colores de prenda por nombre, para dibujarlas y para elegirlos al registrar una prenda. */
@@ -74,6 +76,20 @@ object GarmentColors {
     )
 
     private const val FALLBACK = 0xFF8E8E8E
+
+    /** Nombre del color de la lista más parecido a un color ARGB (distancia perceptual simple). */
+    fun nearest(argb: Long): String {
+        val r = (argb shr 16 and 0xFF).toInt()
+        val g = (argb shr 8 and 0xFF).toInt()
+        val b = (argb and 0xFF).toInt()
+        return named.minByOrNull { (_, c) ->
+            val dr = r - (c shr 16 and 0xFF).toInt()
+            val dg = g - (c shr 8 and 0xFF).toInt()
+            val db = b - (c and 0xFF).toInt()
+            // Pesos aproximados de sensibilidad del ojo.
+            2 * dr * dr + 4 * dg * dg + 3 * db * db
+        }!!.key
+    }
 
     /** Acepta un nombre de la lista (sin importar mayúsculas) o un hexadecimal #RRGGBB. */
     fun resolve(value: String): Long {

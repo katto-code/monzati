@@ -17,6 +17,9 @@ junit = "4.13.2"
 camerax = "1.4.1"
 splashscreen = "1.0.1"
 mlkitPose = "18.0.0-beta5"
+mlkitSegmentation = "16.0.0-beta1"
+mlkitObjects = "17.0.2"
+mlkitLabeling = "17.0.9"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
@@ -48,6 +51,10 @@ camerax-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref =
 camerax-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 camerax-mlkit = { module = "androidx.camera:camera-mlkit-vision", version.ref = "camerax" }
 mlkit-pose = { module = "com.google.mlkit:pose-detection", version.ref = "mlkitPose" }
+mlkit-segmentation = { module = "com.google.android.gms:play-services-mlkit-subject-segmentation", version.ref = "mlkitSegmentation" }
+mlkit-objects = { module = "com.google.mlkit:object-detection", version.ref = "mlkitObjects" }
+mlkit-labeling = { module = "com.google.mlkit:image-labeling", version.ref = "mlkitLabeling" }
+supabase-storage = { module = "io.github.jan-tennert.supabase:storage-kt" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

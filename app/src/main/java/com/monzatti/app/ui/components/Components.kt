@@ -25,6 +25,14 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -329,11 +337,29 @@ fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
 
 /** Marco para la imagen de una prenda o producto (aún emojis en el prototipo). */
 @Composable
-fun ItemImage(emoji: String, height: Dp, emojiSize: Int = 38) {
+fun ItemImage(emoji: String, height: Dp, emojiSize: Int = 38, imagePath: String? = null) {
+    val bitmap = rememberImageFile(imagePath)
     Box(
         modifier = Modifier.fillMaxWidth().height(height).background(MonzattiTheme.colors.surfaceVariant, RoundedCornerShape(10.dp)),
         contentAlignment = Alignment.Center
-    ) { Text(emoji, fontSize = emojiSize.sp) }
+    ) {
+        if (bitmap != null) {
+            Image(bitmap, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(6.dp))
+        } else {
+            Text(emoji, fontSize = emojiSize.sp)
+        }
+    }
+}
+
+/** Carga (una vez) una imagen local en segundo plano. */
+@Composable
+fun rememberImageFile(path: String?): ImageBitmap? {
+    val state = produceState<ImageBitmap?>(initialValue = null, path) {
+        value = path?.let {
+            withContext(Dispatchers.IO) { BitmapFactory.decodeFile(it)?.asImageBitmap() }
+        }
+    }
+    return state.value
 }
 
 @Composable

@@ -73,7 +73,9 @@ data class Garment(
     val detail: String,
     val favorite: Boolean = false,
     /** Nombre del color ("Negro", "Rosa palo"…) o hexadecimal ("#F4C2C2"). */
-    val color: String = ""
+    val color: String = "",
+    /** Foto digitalizada con fondo recortado (PNG local), si existe. */
+    val imagePath: String? = null
 )
 
 data class Product(

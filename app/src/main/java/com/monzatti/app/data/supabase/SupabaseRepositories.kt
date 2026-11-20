@@ -28,6 +28,10 @@ import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order as Order_
 import io.github.jan.supabase.postgrest.rpc
 import io.github.jan.supabase.realtime.RealtimeChannel
+import io.github.jan.supabase.storage.storage
+import com.monzatti.app.data.local.GarmentImages
+import java.io.File
+import java.util.UUID
 import io.github.jan.supabase.realtime.broadcast
 import io.github.jan.supabase.realtime.channel
 import com.monzatti.app.data.fake.OrderDateFormat
@@ -133,7 +137,8 @@ class SupabaseProfileRepository @Inject constructor(
 
 @Singleton
 class SupabaseClosetRepository @Inject constructor(
-    private val client: SupabaseClient
+    private val client: SupabaseClient,
+    private val images: GarmentImages
 ) : ClosetRepository {
 
     private val items = MutableStateFlow<List<Garment>>(emptyList())
@@ -150,13 +155,23 @@ class SupabaseClosetRepository @Inject constructor(
                 size = dto.size.orEmpty(),
                 detail = listOfNotNull(dto.color, dto.size).joinToString(" · "),
                 favorite = dto.isFavorite,
-                color = dto.color.orEmpty()
+                color = dto.color.orEmpty(),
+                imagePath = images.pathIfExists(dto.id)
             )
         }
     }
 
-    override suspend fun add(name: String, category: String, size: String, color: String): Result<Unit> = attempt {
-        val insert = GarmentInsert(client.userIdOrThrow(), name.ifBlank { "Prenda nueva" }, category, size, color, emojiFor(category))
+    override suspend fun add(name: String, category: String, size: String, color: String, imagePath: String?): Result<Unit> = attempt {
+        val ownerId = client.userIdOrThrow()
+        val id = UUID.randomUUID().toString()
+        // La foto se queda en el celular y se respalda en Storage (carpeta privada por usuario).
+        val storagePath = imagePath?.let { draft ->
+            val local = images.promote(draft, id)
+            val path = "$ownerId/$id.png"
+            client.storage.from("garments").upload(path, File(local).readBytes()) { upsert = true }
+            path
+        }
+        val insert = GarmentInsert(id, ownerId, name.ifBlank { "Prenda nueva" }, category, size, color, emojiFor(category), storagePath)
         client.from("garments").insert(insert)
         refresh().getOrThrow()
     }

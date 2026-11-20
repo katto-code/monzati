@@ -40,6 +40,8 @@ import com.monzatti.app.ui.components.SecondaryButton
 import com.monzatti.app.ui.components.SurfaceCard
 import com.monzatti.app.ui.components.Title
 import com.monzatti.app.ui.feature.tryon.drawGarment
+import com.monzatti.app.ui.feature.tryon.drawGarmentImage
+import com.monzatti.app.ui.components.rememberImageFile
 import com.monzatti.app.ui.feature.tryon.drawMannequin
 import com.monzatti.app.ui.feature.tryon.mannequinFrame
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -139,10 +141,11 @@ fun MirrorScreen(onBack: () -> Unit, onCamera: () -> Unit, viewModel: MirrorView
             contentAlignment = Alignment.Center
         ) {
             if (projection.projecting && item != null) {
+                val photo = rememberImageFile(item.imagePath)
                 Canvas(Modifier.fillMaxSize()) {
                     val body = mannequinFrame(size.width, size.height)
                     drawMannequin(body, Color(0xFF3A3A3A))
-                    drawGarment(body, item.kind, Color(item.color))
+                    if (photo != null) drawGarmentImage(body, item.kind, photo) else drawGarment(body, item.kind, Color(item.color))
                 }
                 Text(
                     "EN VIVO · ${item.name}",

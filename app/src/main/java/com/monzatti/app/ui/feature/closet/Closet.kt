@@ -134,14 +134,14 @@ fun ClosetScreen(
             val rows = (visible.size + 1) / 2
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxWidth().height((rows * 230).dp),
+                modifier = Modifier.fillMaxWidth().height((rows * 262).dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 userScrollEnabled = false
             ) {
                 items(visible, key = { it.id }) { garment ->
                     SurfaceCard {
-                        ItemImage(garment.emoji, 88.dp)
+                        ItemImage(garment.emoji, 88.dp, imagePath = garment.imagePath)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(garment.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = c.ink)
                             TextButton(onClick = { viewModel.toggleFavorite(garment.id) }, contentPadding = PaddingValues(0.dp)) {
@@ -162,37 +162,8 @@ fun ClosetScreen(
     }
 }
 
-/** 3. Fotos / escaneo de ropa (simulado: aún sin cámara). */
 @Composable
-fun AddGarmentScreen(onBack: () -> Unit, viewModel: ClosetViewModel = hiltViewModel()) {
-    val error by viewModel.error.collectAsStateWithLifecycle()
-    val saving by viewModel.saving.collectAsStateWithLifecycle()
-    var name by rememberSaveable { mutableStateOf("Prenda nueva") }
-    var category by rememberSaveable { mutableStateOf(GarmentCategories.first()) }
-    var size by rememberSaveable { mutableStateOf("M") }
-    var color by rememberSaveable { mutableStateOf("Negro") }
-
-    ScreenColumn {
-        BackLink("← Nueva prenda", onBack)
-        FieldLabel("DALE VIDA A TU CLOSET")
-        Title("Captura cada detalle.")
-        ItemImage("📷", 190.dp, emojiSize = 72)
-        MutedText("Centra la prenda con buena iluminación")
-        FieldLabel("NOMBRE DE LA PRENDA")
-        AppTextField(name, { name = it })
-        FieldLabel("CATEGORÍA")
-        ChoiceRow(GarmentCategories, category) { category = it }
-        FieldLabel("TALLA DE LA PRENDA")
-        ChoiceRow(GarmentSizes, size) { size = it }
-        FieldLabel("COLOR")
-        ColorChoiceRow(color) { color = it }
-        ErrorText(error)
-        PrimaryButton("Guardar en mi closet", onClick = { viewModel.add(name, category, size, color, onBack) }, accent = true, loading = saving)
-    }
-}
-
-@Composable
-private fun ColorChoiceRow(selected: String, onSelect: (String) -> Unit) {
+internal fun ColorChoiceRow(selected: String, onSelect: (String) -> Unit) {
     val c = MonzattiTheme.colors
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),

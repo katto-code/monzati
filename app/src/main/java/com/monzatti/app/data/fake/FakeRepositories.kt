@@ -1,5 +1,6 @@
 package com.monzatti.app.data.fake
 
+import com.monzatti.app.data.local.GarmentImages
 import com.monzatti.app.domain.model.Garment
 import com.monzatti.app.domain.model.NewProduct
 import com.monzatti.app.domain.model.OutOfStockException
@@ -98,7 +99,7 @@ class FakeProfileRepository @Inject constructor(private val auth: FakeAuthReposi
 }
 
 @Singleton
-class FakeClosetRepository @Inject constructor() : ClosetRepository {
+class FakeClosetRepository @Inject constructor(private val images: GarmentImages) : ClosetRepository {
 
     private val items = MutableStateFlow(
         listOf(
@@ -113,15 +114,17 @@ class FakeClosetRepository @Inject constructor() : ClosetRepository {
 
     override suspend fun refresh(): Result<Unit> = Result.success(Unit)
 
-    override suspend fun add(name: String, category: String, size: String, color: String): Result<Unit> {
+    override suspend fun add(name: String, category: String, size: String, color: String, imagePath: String?): Result<Unit> {
+        val id = UUID.randomUUID().toString()
         val garment = Garment(
-            id = UUID.randomUUID().toString(),
+            id = id,
             name = name.ifBlank { "Prenda nueva" },
             emoji = emojiFor(category),
             category = category,
             size = size,
             detail = "$color · $size",
-            color = color
+            color = color,
+            imagePath = imagePath?.let { images.promote(it, id) }
         )
         items.update { it + garment }
         return Result.success(Unit)

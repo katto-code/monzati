@@ -8,6 +8,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import com.monzatti.app.domain.tryon.GarmentKind
 
 private fun Pt.o() = Offset(x, y)
@@ -152,6 +156,41 @@ fun DrawScope.drawGarment(frame: BodyFrame, kind: GarmentKind, color: Color) {
         }
     }
     drawPath(torso, outline, style = Stroke(outlineWidth))
+}
+
+/**
+ * Dibuja la FOTO real de la prenda (fondo recortado) sobre el cuerpo: se escala al ancho de hombros,
+ * gira con la inclinación de los hombros y cuelga desde el cuello.
+ */
+fun DrawScope.drawGarmentImage(frame: BodyFrame, kind: GarmentKind, image: ImageBitmap) {
+    val sA = frame.shoulderLeft.o()
+    val sB = frame.shoulderRight.o()
+    val w = (sB - sA).getDistance()
+    if (w < 1f || image.width == 0) return
+    val mid = (sA + sB) / 2f
+    val hipMid = (frame.hipLeft.o() + frame.hipRight.o()) / 2f
+    val torso = (hipMid - mid).getDistance().coerceAtLeast(w)
+    // Ancho de la foto respecto a los hombros (incluye mangas) y cuánto baja.
+    val widthFactor = when (kind) {
+        GarmentKind.JACKET -> 2.0f
+        GarmentKind.DRESS -> 1.7f
+        GarmentKind.BLOUSE -> 1.85f
+    }
+    val drawW = w * widthFactor
+    val drawH = drawW * image.height / image.width
+    // Para vestidos se asegura que llegue a las rodillas.
+    val minH = if (kind == GarmentKind.DRESS) torso * 2.1f else torso * 1.1f
+    val finalH = maxOf(drawH, minH)
+    val finalW = if (finalH > drawH) drawW * 0.92f else drawW
+    val angle = Math.toDegrees(kotlin.math.atan2((sB.y - sA.y).toDouble(), (sB.x - sA.x).toDouble())).toFloat()
+    val top = mid.y - w * 0.18f
+    withTransform({ rotate(angle, pivot = mid) }) {
+        drawImage(
+            image = image,
+            dstOffset = IntOffset((mid.x - finalW / 2).toInt(), top.toInt()),
+            dstSize = IntSize(finalW.toInt(), finalH.toInt())
+        )
+    }
 }
 
 /** Esqueleto fijo de un maniquí, para el espejo cuando no hay cámara. */

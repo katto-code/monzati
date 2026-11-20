@@ -32,7 +32,7 @@ interface StyleRepository {
 interface ClosetRepository {
     val garments: StateFlow<List<Garment>>
     suspend fun refresh(): Result<Unit>
-    suspend fun add(name: String, category: String, size: String, color: String): Result<Unit>
+    suspend fun add(name: String, category: String, size: String, color: String, imagePath: String? = null): Result<Unit>
     suspend fun toggleFavorite(id: String): Result<Unit>
 }
 

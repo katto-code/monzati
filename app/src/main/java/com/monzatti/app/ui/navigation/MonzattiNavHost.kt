@@ -40,7 +40,7 @@ import com.monzatti.app.ui.feature.auth.RecoveryScreen
 import com.monzatti.app.ui.feature.business.InventoryScreen
 import com.monzatti.app.ui.feature.business.NewProductScreen
 import com.monzatti.app.ui.feature.business.SalesScreen
-import com.monzatti.app.ui.feature.closet.AddGarmentScreen
+import com.monzatti.app.ui.feature.closet.DigitizeScreen
 import com.monzatti.app.ui.feature.closet.ClosetScreen
 import com.monzatti.app.ui.feature.fittingroom.FittingRoomScreen
 import com.monzatti.app.ui.feature.fittingroom.MirrorScreen
@@ -206,7 +206,7 @@ fun MonzattiNavHost(session: SessionViewModel = hiltViewModel()) {
                     onSignOut = signOut
                 )
             }
-            composable<AddGarmentRoute> { AddGarmentScreen(onBack = { nav.popBackStack() }) }
+            composable<AddGarmentRoute> { DigitizeScreen(onDone = { nav.popBackStack() }) }
             composable<ShopRoute> {
                 ShopScreen(
                     onProduct = { nav.navigate(ProductRoute(it)) },

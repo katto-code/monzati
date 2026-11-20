@@ -25,17 +25,20 @@ data class GarmentDto(
     val size: String? = null,
     val color: String? = null,
     val emoji: String? = null,
+    @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("is_favorite") val isFavorite: Boolean = false
 )
 
 @Serializable
 data class GarmentInsert(
+    val id: String,
     @SerialName("owner_id") val ownerId: String,
     val name: String,
     val category: String,
     val size: String,
     val color: String,
-    val emoji: String
+    val emoji: String,
+    @SerialName("image_url") val imageUrl: String? = null
 )
 
 @Serializable
