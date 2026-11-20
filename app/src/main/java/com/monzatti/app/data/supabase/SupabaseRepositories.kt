@@ -27,6 +27,9 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order as Order_
 import io.github.jan.supabase.postgrest.rpc
+import io.github.jan.supabase.realtime.RealtimeChannel
+import io.github.jan.supabase.realtime.broadcast
+import io.github.jan.supabase.realtime.channel
 import com.monzatti.app.data.fake.OrderDateFormat
 import com.monzatti.app.domain.shop.CartLine
 import com.monzatti.app.domain.shop.CartRepository
@@ -349,7 +352,31 @@ class SupabaseMirrorRepository @Inject constructor(
             isProjecting = true
         )
         client.from("mirror_sessions").upsert(row) { onConflict = "user_id,mirror_code" }
+        broadcast(item, projecting = true)
         state.value = MirrorProjection(item = item, projecting = true)
+    }
+
+    private var channel: RealtimeChannel? = null
+
+    /** Avisa al espejo web (mirror/) por Supabase Realtime: llega en menos de un segundo (RF-02). */
+    private suspend fun broadcast(item: TryOnItem?, projecting: Boolean) {
+        val ch = channel ?: client.channel("mirror:${MirrorRepository.MIRROR_CODE}").also {
+            it.subscribe(blockUntilSubscribed = true)
+            channel = it
+        }
+        ch.broadcast(
+            event = "projection",
+            message = buildJsonObject {
+                put("projecting", projecting)
+                if (item != null) {
+                    put("id", item.id)
+                    put("name", item.name)
+                    put("brand", item.subtitle)
+                    put("kind", item.kind.name)
+                    put("color", "#%06X".format(item.color and 0xFFFFFF))
+                }
+            }
+        )
     }
 
     override suspend fun stop(): Result<Unit> = attempt {
@@ -360,6 +387,7 @@ class SupabaseMirrorRepository @Inject constructor(
                 eq("mirror_code", MirrorRepository.MIRROR_CODE)
             }
         }
+        broadcast(null, projecting = false)
         state.update { it.copy(projecting = false) }
     }
 }
