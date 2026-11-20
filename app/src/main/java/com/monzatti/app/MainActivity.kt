@@ -6,6 +6,10 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.onEach
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.toArgb
@@ -26,8 +30,13 @@ import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel
 class MainViewModel @Inject constructor(styles: StyleRepository) : ViewModel() {
-    val style: StateFlow<StylePalette> =
-        styles.style.stateIn(viewModelScope, SharingStarted.Eagerly, StylePalette.MONZATTI)
+    private val _ready = MutableStateFlow(false)
+    /** El splash se mantiene hasta conocer el estilo guardado, para no parpadear de colores. */
+    val ready: StateFlow<Boolean> = _ready.asStateFlow()
+
+    val style: StateFlow<StylePalette> = styles.style
+        .onEach { _ready.value = true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, StylePalette.MONZATTI)
 }
 
 @AndroidEntryPoint
@@ -36,6 +45,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen().setKeepOnScreenCondition { !viewModel.ready.value }
         super.onCreate(savedInstanceState)
         setContent {
             val style by viewModel.style.collectAsStateWithLifecycle()

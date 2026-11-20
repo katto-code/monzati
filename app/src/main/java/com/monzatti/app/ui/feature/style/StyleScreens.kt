@@ -113,7 +113,7 @@ fun StylePickerScreen(onBack: () -> Unit, onSelect: (StylePalette) -> Unit, view
 /** Vista previa de la app pintada con una paleta. */
 @Composable
 fun StylePreviewCard(palette: StylePalette, gender: Gender?, modifier: Modifier = Modifier) {
-    MonzattiTheme(palette) {
+    MonzattiTheme(palette, animate = false) {
         val c = MonzattiTheme.colors
         Column(
             modifier

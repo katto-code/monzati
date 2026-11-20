@@ -1,5 +1,10 @@
 package com.monzatti.app.ui.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -134,7 +139,15 @@ fun MonzattiNavHost(session: SessionViewModel = hiltViewModel()) {
             }
         }
     ) { padding ->
-        NavHost(navController = nav, startDestination = LoginRoute, modifier = Modifier.padding(padding)) {
+        NavHost(
+            navController = nav,
+            startDestination = LoginRoute,
+            modifier = Modifier.padding(padding),
+            enterTransition = { fadeIn(tween(260)) + slideInHorizontally(tween(300)) { it / 10 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(260)) + slideInHorizontally(tween(300)) { -it / 10 } },
+            popExitTransition = { fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { it / 10 } }
+        ) {
             // 1. Login / autenticación
             composable<LoginRoute> {
                 LoginScreen(

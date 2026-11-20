@@ -1,7 +1,10 @@
 package com.monzatti.app.di
 
 import com.monzatti.app.BuildConfig
+import android.content.Context
+import com.monzatti.app.core.config.DemoMode
 import com.monzatti.app.core.config.SupabaseConfig
+import dagger.hilt.android.qualifiers.ApplicationContext
 import com.monzatti.app.data.StyleRepositoryImpl
 import com.monzatti.app.data.fake.FakeAuthRepository
 import com.monzatti.app.data.fake.FakeClosetRepository
@@ -44,8 +47,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideSupabaseConfig(): SupabaseConfig =
-        SupabaseConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
+    fun provideSupabaseConfig(@ApplicationContext context: Context): SupabaseConfig =
+        SupabaseConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY, DemoMode.isForced(context))
 
     @Provides
     @Singleton

@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
+import com.monzatti.app.core.config.DemoMode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,15 +70,27 @@ fun LoginScreen(
         }
         ErrorText(state.error)
         PrimaryButton(
-            if (state.loading) "Entrando…" else "Entrar a mi universo  →",
+            "Entrar a mi universo  →",
             onClick = { viewModel.signIn(email, password, role, onLoggedIn) },
-            enabled = !state.loading
+            loading = state.loading
         )
         SecondaryButton("Crear cuenta", onClick = onCreate)
         TextButton(onClick = onAbout, modifier = Modifier.fillMaxWidth()) {
             Text("Conoce el proyecto Monzatti", color = MonzattiTheme.colors.muted)
         }
         MutedText("Al continuar, aceptas los Términos y el Aviso de privacidad.")
+        if (viewModel.canToggleDemo) {
+            val activity = LocalContext.current as? Activity
+            TextButton(onClick = { activity?.let { DemoMode.setAndRestart(it, !viewModel.isDemo) } }, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    if (viewModel.isDemo) "Modo demo activo · Volver a conectar con Supabase" else "Usar modo demo (sin conexión)",
+                    color = MonzattiTheme.colors.muted,
+                    fontSize = 11.sp
+                )
+            }
+        } else {
+            MutedText("Modo demo · datos de ejemplo")
+        }
     }
 }
 
@@ -112,7 +128,7 @@ fun CreateAccountScreen(
         MutedText(PasswordRules.DESCRIPTION)
         ErrorText(localError ?: state.error)
         PrimaryButton(
-            if (state.loading) "Creando…" else "Crear mi cuenta",
+            "Crear mi cuenta",
             onClick = {
                 val g = gender
                 if (g == null) {
@@ -122,7 +138,7 @@ fun CreateAccountScreen(
                     viewModel.signUp(SignUpRequest(name, email, password, role, g), onCreated)
                 }
             },
-            enabled = !state.loading
+            loading = state.loading
         )
     }
 }
@@ -139,7 +155,7 @@ fun RecoveryScreen(onBack: () -> Unit, viewModel: AuthViewModel = hiltViewModel(
         FieldLabel("CORREO ELECTRÓNICO")
         AppTextField(email, { email = it })
         ErrorText(state.error)
-        PrimaryButton("Enviar enlace", onClick = { viewModel.sendReset(email) }, enabled = !state.loading)
+        PrimaryButton("Enviar enlace", onClick = { viewModel.sendReset(email) }, loading = state.loading)
         if (state.resetSent) InfoCard("✓  Enlace enviado. Es válido por 30 minutos. Revisa tu carpeta de spam.")
     }
 }

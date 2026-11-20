@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import com.monzatti.app.domain.tryon.GarmentColors
 import com.monzatti.app.domain.tryon.toTryOnItem
 import com.monzatti.app.ui.components.SecondaryButton
+import com.monzatti.app.ui.components.SkeletonGrid
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -73,8 +74,17 @@ class ClosetViewModel @Inject constructor(private val closet: ClosetRepository) 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _loading = MutableStateFlow(true)
+    val loading: StateFlow<Boolean> = _loading.asStateFlow()
+
+    private val _saving = MutableStateFlow(false)
+    val saving: StateFlow<Boolean> = _saving.asStateFlow()
+
     init {
-        viewModelScope.launch { closet.refresh().onFailure { _error.value = it.message } }
+        viewModelScope.launch {
+            closet.refresh().onFailure { _error.value = it.message }
+            _loading.value = false
+        }
     }
 
     fun toggleFavorite(id: String) = viewModelScope.launch {
@@ -82,9 +92,11 @@ class ClosetViewModel @Inject constructor(private val closet: ClosetRepository) 
     }
 
     fun add(name: String, category: String, size: String, color: String, onDone: () -> Unit) = viewModelScope.launch {
+        _saving.value = true
         closet.add(name, category, size, color)
             .onSuccess { onDone() }
             .onFailure { _error.value = it.message }
+        _saving.value = false
     }
 }
 
@@ -98,6 +110,7 @@ fun ClosetScreen(
 ) {
     val garments by viewModel.garments.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
+    val loading by viewModel.loading.collectAsStateWithLifecycle()
     var category by rememberSaveable { mutableStateOf("Todo") }
     val c = MonzattiTheme.colors
 
@@ -113,7 +126,9 @@ fun ClosetScreen(
         ChoiceRow(listOf("Todo") + GarmentCategories, category) { category = it }
         ErrorText(error)
         val visible = garments.filter { category == "Todo" || it.category == category }
-        if (visible.isEmpty()) {
+        if (loading) {
+            SkeletonGrid(cards = 4, cardHeight = 220.dp)
+        } else if (visible.isEmpty()) {
             InfoCard("Aún no tienes prendas en esta categoría.")
         } else {
             val rows = (visible.size + 1) / 2
@@ -151,6 +166,7 @@ fun ClosetScreen(
 @Composable
 fun AddGarmentScreen(onBack: () -> Unit, viewModel: ClosetViewModel = hiltViewModel()) {
     val error by viewModel.error.collectAsStateWithLifecycle()
+    val saving by viewModel.saving.collectAsStateWithLifecycle()
     var name by rememberSaveable { mutableStateOf("Prenda nueva") }
     var category by rememberSaveable { mutableStateOf(GarmentCategories.first()) }
     var size by rememberSaveable { mutableStateOf("M") }
@@ -171,7 +187,7 @@ fun AddGarmentScreen(onBack: () -> Unit, viewModel: ClosetViewModel = hiltViewMo
         FieldLabel("COLOR")
         ColorChoiceRow(color) { color = it }
         ErrorText(error)
-        PrimaryButton("Guardar en mi closet", onClick = { viewModel.add(name, category, size, color, onBack) }, accent = true)
+        PrimaryButton("Guardar en mi closet", onClick = { viewModel.add(name, category, size, color, onBack) }, accent = true, loading = saving)
     }
 }
 

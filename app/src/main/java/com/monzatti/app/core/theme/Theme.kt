@@ -1,5 +1,8 @@
 package com.monzatti.app.core.theme
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -41,6 +44,26 @@ private val MonzattiTypography: Typography = Typography().let { base ->
     )
 }
 
+/** Transición suave de colores al cambiar de estilo. */
+@Composable
+private fun MonzattiColors.animated(): MonzattiColors {
+    val spec = tween<Color>(durationMillis = 450)
+    return copy(
+        background = animateColorAsState(background, spec, label = "bg").value,
+        surface = animateColorAsState(surface, spec, label = "surface").value,
+        surfaceVariant = animateColorAsState(surfaceVariant, spec, label = "variant").value,
+        ink = animateColorAsState(ink, spec, label = "ink").value,
+        muted = animateColorAsState(muted, spec, label = "muted").value,
+        line = animateColorAsState(line, spec, label = "line").value,
+        primary = animateColorAsState(primary, spec, label = "primary").value,
+        onPrimary = animateColorAsState(onPrimary, spec, label = "onPrimary").value,
+        accent = animateColorAsState(accent, spec, label = "accent").value,
+        onAccent = animateColorAsState(onAccent, spec, label = "onAccent").value,
+        brand = animateColorAsState(brand, spec, label = "brand").value,
+        positive = animateColorAsState(positive, spec, label = "positive").value
+    )
+}
+
 private val LocalMonzattiColors = staticCompositionLocalOf { StylePalette.MONZATTI.colors() }
 
 object MonzattiTheme {
@@ -49,8 +72,9 @@ object MonzattiTheme {
 }
 
 @Composable
-fun MonzattiTheme(palette: StylePalette, content: @Composable () -> Unit) {
-    val c = palette.colors()
+fun MonzattiTheme(palette: StylePalette, animate: Boolean = true, content: @Composable () -> Unit) {
+    val target = palette.colors()
+    val c = if (animate) target.animated() else target
     // En Material, "primary" se usa para foco, cursores, sliders y enlaces: usamos el color de texto para que
     // siempre se lea. Los botones de Monzatti usan los tokens primary/accent directamente.
     val scheme = if (c.isDark) {

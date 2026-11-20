@@ -2,6 +2,7 @@ package com.monzatti.app.ui.feature.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.monzatti.app.core.config.SupabaseConfig
 import com.monzatti.app.domain.model.SignUpRequest
 import com.monzatti.app.domain.model.UserProfile
 import com.monzatti.app.domain.model.UserRole
@@ -24,8 +25,13 @@ data class AuthUiState(
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val auth: AuthRepository,
-    private val styles: StyleRepository
+    private val styles: StyleRepository,
+    config: SupabaseConfig
 ) : ViewModel() {
+
+    /** Hay claves de Supabase: se puede alternar al modo demo (útil si falla internet en la presentación). */
+    val canToggleDemo: Boolean = config.hasKeys
+    val isDemo: Boolean = !config.isConfigured
 
     private val _state = MutableStateFlow(AuthUiState())
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
