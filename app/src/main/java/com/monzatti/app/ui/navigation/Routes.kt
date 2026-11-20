@@ -20,6 +20,10 @@ import kotlinx.serialization.Serializable
 @Serializable object AddGarmentRoute
 @Serializable object ShopRoute
 @Serializable data class ProductRoute(val productId: String)
+@Serializable object CartRoute
+@Serializable object CheckoutRoute
+@Serializable data class OrderConfirmedRoute(val orderId: String)
+@Serializable object OrdersRoute
 @Serializable object AssistantRoute
 @Serializable object FittingRoomRoute
 @Serializable object MirrorRoute

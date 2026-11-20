@@ -80,7 +80,8 @@ create trigger profiles_protect_role
 -- ───────────────────────── Marcas aliadas ─────────────────────────
 create table public.brands (
   id          uuid primary key default gen_random_uuid(),
-  owner_id    uuid not null references public.profiles (id) on delete cascade,
+  -- Null = marca ficticia administrada por Monzatti (catálogo de demostración).
+  owner_id    uuid references public.profiles (id) on delete cascade,
   name        text not null,
   verified    boolean not null default false,  -- lo valida el admin
   created_at  timestamptz not null default now()
@@ -285,14 +286,10 @@ create policy "closet: dueño" on public.garments for all to authenticated
 -- Pedidos: el comprador los suyos; el admin todos. (La comisión la fija el servidor, no la app.)
 create policy "pedidos: leer" on public.orders for select to authenticated
   using (buyer_id = (select auth.uid()) or (select public.is_admin()));
-create policy "pedidos: crear" on public.orders for insert to authenticated
-  with check (buyer_id = (select auth.uid()) and commission_rate = 0.10);
+-- Los pedidos solo se crean con confirm_order() (ver migración de tienda), nunca directo desde la app.
 create policy "partidas: leer" on public.order_items for select to authenticated
   using (exists (select 1 from public.orders o where o.id = order_id
                  and (o.buyer_id = (select auth.uid()) or (select public.is_admin()))));
-create policy "partidas: crear" on public.order_items for insert to authenticated
-  with check (exists (select 1 from public.orders o where o.id = order_id
-                      and o.buyer_id = (select auth.uid()) and o.status = 'pendiente'));
 
 -- Reservas: se crean con reserve_variant(); cada quien ve las suyas.
 create policy "reservas: leer" on public.inventory_reservations for select to authenticated

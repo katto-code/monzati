@@ -9,6 +9,7 @@ import com.monzatti.app.domain.repository.ClosetRepository
 import com.monzatti.app.domain.repository.MirrorProjection
 import com.monzatti.app.domain.repository.MirrorRepository
 import com.monzatti.app.domain.repository.ProductRepository
+import com.monzatti.app.domain.shop.CartRepository
 import com.monzatti.app.domain.tryon.TryOnItem
 import com.monzatti.app.domain.tryon.TryOnSource
 import com.monzatti.app.domain.tryon.toTryOnItem
@@ -28,6 +29,7 @@ import kotlinx.coroutines.launch
 class TryOnViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val products: ProductRepository,
+    private val cart: CartRepository,
     closet: ClosetRepository,
     private val mirror: MirrorRepository
 ) : ViewModel() {
@@ -78,8 +80,8 @@ class TryOnViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            _message.value = products.addToBag(item.id, available)
-                .fold({ "Añadida a tu bolsa · talla $available" }, { it.message })
+            _message.value = cart.add(item.id, available)
+                .fold({ "Añadida al carrito · talla $available" }, { it.message })
         }
     }
 

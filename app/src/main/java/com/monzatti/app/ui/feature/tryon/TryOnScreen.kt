@@ -240,7 +240,7 @@ private fun BottomPanel(
                     Text(selected.subtitle.uppercase(), color = c.muted, fontSize = 10.sp, letterSpacing = 1.1.sp)
                     Text(selected.name, color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 }
-                selected.price?.let { Text("$" + "%,d".format(it) + " MXN", color = c.ink, fontWeight = FontWeight.SemiBold) }
+                selected.price?.let { Text(com.monzatti.app.domain.shop.mxn(it), color = c.ink, fontWeight = FontWeight.SemiBold) }
             }
         } else {
             Text(
@@ -282,7 +282,7 @@ private fun BottomPanel(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(11.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = c.primary, contentColor = c.onPrimary)
-                ) { Text("Añadir a bolsa") }
+                ) { Text("Añadir al carrito") }
             }
             Button(
                 onClick = onMirror,

@@ -45,6 +45,9 @@ import com.monzatti.app.ui.components.PrimaryButton
 import com.monzatti.app.ui.components.ScreenColumn
 import com.monzatti.app.ui.components.SurfaceCard
 import com.monzatti.app.ui.components.Title
+import com.monzatti.app.ui.components.Skeleton
+import com.monzatti.app.domain.shop.SalesSummary
+import com.monzatti.app.domain.shop.mxn
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,8 +67,20 @@ class BusinessViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _sales = MutableStateFlow<SalesSummary?>(null)
+    /** Null mientras carga. */
+    val sales: StateFlow<SalesSummary?> = _sales.asStateFlow()
+
+    private val _publishing = MutableStateFlow(false)
+    val publishing: StateFlow<Boolean> = _publishing.asStateFlow()
+
     init {
-        viewModelScope.launch { repository.refresh().onFailure { _error.value = it.message } }
+        viewModelScope.launch {
+            repository.refresh().onFailure { _error.value = it.message }
+            repository.salesSummary()
+                .onSuccess { _sales.value = it }
+                .onFailure { _error.value = it.message; _sales.value = SalesSummary(0, 0, 0, 0, 0) }
+        }
     }
 
     fun publish(name: String, price: String, sizes: Set<String>, stock: String, onDone: () -> Unit) {
@@ -75,9 +90,11 @@ class BusinessViewModel @Inject constructor(
             parsedPrice == null || parsedPrice < 0 -> _error.value = "Escribe un precio válido."
             parsedStock == null || parsedStock < 0 -> _error.value = "Escribe existencias válidas."
             else -> viewModelScope.launch {
+                _publishing.value = true
                 repository.publish(NewProduct(name, parsedPrice, GarmentSizes.filter { it in sizes }, parsedStock))
                     .onSuccess { _error.value = null; onDone() }
                     .onFailure { _error.value = it.message }
+                _publishing.value = false
             }
         }
     }
@@ -103,6 +120,7 @@ fun SalesScreen(
 ) {
     val user by viewModel.user.collectAsStateWithLifecycle()
     val products by viewModel.products.collectAsStateWithLifecycle()
+    val sales by viewModel.sales.collectAsStateWithLifecycle()
     val c = MonzattiTheme.colors
     ScreenColumn {
         BusinessHeader(onChangeStyle, onSignOut)
@@ -110,8 +128,13 @@ fun SalesScreen(
         MutedText("Tu marca, en movimiento.")
         SurfaceCard {
             FieldLabel("VENTAS TOTALES · MXN")
-            Text("$48,250", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = c.ink)
-            Text("↗ 18.6 % vs. mes anterior", color = c.positive)
+            val s = sales
+            if (s == null) {
+                Skeleton(Modifier.fillMaxWidth(0.6f).height(36.dp))
+            } else {
+                Text(mxn(s.gross).removeSuffix(" MXN"), fontSize = 30.sp, fontWeight = FontWeight.Bold, color = c.ink)
+                Text("Neto para tu marca: ${mxn(s.net)} · comisión Monzatti ${mxn(s.commission)}", color = c.positive, fontSize = 12.sp)
+            }
             Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Bottom) {
                 listOf(10, 15, 12, 20, 16, 26, 33, 29, 38, 35, 43, 50).forEach {
@@ -119,10 +142,13 @@ fun SalesScreen(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            MutedText("Comisión Monzatti: 10 % a 15 % sobre el importe neto de cada prenda.")
+            MutedText("Comisión Monzatti: 12 % (rango 10–15 %) sobre el importe neto de cada prenda.")
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricCard("PEDIDOS", "32", Modifier.weight(1f))
+            MetricCard("PEDIDOS", sales?.orders?.toString() ?: "–", Modifier.weight(1f))
+            MetricCard("PIEZAS", sales?.units?.toString() ?: "–", Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricCard("PRODUCTOS", products.size.toString(), Modifier.weight(1f))
         }
         PrimaryButton("+  Registrar producto", onClick = onAddProduct, accent = true)
@@ -133,6 +159,7 @@ fun SalesScreen(
 @Composable
 fun NewProductScreen(onPublished: () -> Unit, viewModel: BusinessViewModel = hiltViewModel()) {
     val error by viewModel.error.collectAsStateWithLifecycle()
+    val publishing by viewModel.publishing.collectAsStateWithLifecycle()
     var name by rememberSaveable { mutableStateOf("Chamarra de lino") }
     var price by rememberSaveable { mutableStateOf("2100") }
     var stock by rememberSaveable { mutableStateOf("5") }
@@ -149,7 +176,7 @@ fun NewProductScreen(onPublished: () -> Unit, viewModel: BusinessViewModel = hil
         FieldLabel("EXISTENCIAS POR TALLA")
         AppTextField(stock, { stock = it }, number = true)
         ErrorText(error)
-        PrimaryButton("Publicar producto", onClick = { viewModel.publish(name, price, sizes, stock, onPublished) }, accent = true)
+        PrimaryButton("Publicar producto", onClick = { viewModel.publish(name, price, sizes, stock, onPublished) }, accent = true, loading = publishing)
         MutedText("El producto aparecerá en el catálogo de la tienda al publicarlo.")
     }
 }
@@ -168,7 +195,7 @@ fun InventoryScreen(viewModel: BusinessViewModel = hiltViewModel()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(product.name, fontWeight = FontWeight.SemiBold, color = c.ink)
-                        MutedText("${product.brand} · $${product.price} MXN")
+                        MutedText("${product.brand} · ${mxn(product.price)}")
                     }
                     val status = when {
                         product.totalStock == 0 -> "Agotado"

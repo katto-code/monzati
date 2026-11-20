@@ -41,6 +41,10 @@ import com.monzatti.app.ui.feature.fittingroom.FittingRoomScreen
 import com.monzatti.app.ui.feature.fittingroom.MirrorScreen
 import com.monzatti.app.ui.feature.shop.ProductScreen
 import com.monzatti.app.ui.feature.shop.ShopScreen
+import com.monzatti.app.ui.feature.shop.CartScreen
+import com.monzatti.app.ui.feature.shop.CheckoutScreen
+import com.monzatti.app.ui.feature.shop.OrderConfirmedScreen
+import com.monzatti.app.ui.feature.shop.OrdersScreen
 import com.monzatti.app.ui.feature.style.StyleChoiceScreen
 import com.monzatti.app.ui.feature.style.StylePickerScreen
 import com.monzatti.app.ui.feature.style.StyleQuizScreen
@@ -193,15 +197,43 @@ fun MonzattiNavHost(session: SessionViewModel = hiltViewModel()) {
             composable<ShopRoute> {
                 ShopScreen(
                     onProduct = { nav.navigate(ProductRoute(it)) },
-                    onTryOn = { nav.navigate(TryOnRoute(it)) }
+                    onTryOn = { nav.navigate(TryOnRoute(it)) },
+                    onCart = { nav.navigate(CartRoute) },
+                    onOrders = { nav.navigate(OrdersRoute) }
                 )
             }
             composable<ProductRoute> { backStack ->
                 ProductScreen(
                     productId = backStack.toRoute<ProductRoute>().productId,
                     onBack = { nav.popBackStack() },
-                    onTryOn = { nav.navigate(TryOnRoute(it)) }
+                    onTryOn = { nav.navigate(TryOnRoute(it)) },
+                    onCart = { nav.navigate(CartRoute) }
                 )
+            }
+            composable<CartRoute> {
+                CartScreen(
+                    onBack = { nav.popBackStack() },
+                    onCheckout = { nav.navigate(CheckoutRoute) },
+                    onShop = { nav.switchTab(ShopRoute, ClosetRoute) }
+                )
+            }
+            composable<CheckoutRoute> {
+                CheckoutScreen(
+                    onBack = { nav.popBackStack() },
+                    onDone = { id ->
+                        nav.navigate(OrderConfirmedRoute(id)) { popUpTo<ShopRoute>() }
+                    }
+                )
+            }
+            composable<OrderConfirmedRoute> { backStack ->
+                OrderConfirmedScreen(
+                    orderId = backStack.toRoute<OrderConfirmedRoute>().orderId,
+                    onOrders = { nav.navigate(OrdersRoute) { popUpTo<ShopRoute>() } },
+                    onShop = { nav.switchTab(ShopRoute, ClosetRoute) }
+                )
+            }
+            composable<OrdersRoute> {
+                OrdersScreen(onBack = { nav.popBackStack() }, onShop = { nav.switchTab(ShopRoute, ClosetRoute) })
             }
             composable<AssistantRoute> { AssistantScreen(onTryOn = { nav.navigate(TryOnRoute()) }) }
             composable<FittingRoomRoute> {

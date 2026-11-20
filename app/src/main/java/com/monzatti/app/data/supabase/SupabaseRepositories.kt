@@ -23,7 +23,19 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
+import io.github.jan.supabase.postgrest.query.Order as Order_
+import io.github.jan.supabase.postgrest.rpc
+import com.monzatti.app.data.fake.OrderDateFormat
+import com.monzatti.app.domain.shop.CartLine
+import com.monzatti.app.domain.shop.CartRepository
+import com.monzatti.app.domain.shop.Order
+import com.monzatti.app.domain.shop.OrderLine
+import com.monzatti.app.domain.shop.SalesSummary
+import com.monzatti.app.domain.shop.ShopRules
+import java.time.OffsetDateTime
+import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -161,11 +173,6 @@ class SupabaseProductRepository @Inject constructor(
     private val items = MutableStateFlow<List<Product>>(emptyList())
     override val products: StateFlow<List<Product>> = items.asStateFlow()
 
-    // El checkout (pedidos, comisión y reservas de 10 min) está modelado en la base de datos pero aún no se usa:
-    // la bolsa vive en memoria, igual que en el prototipo.
-    private val bag = MutableStateFlow(0)
-    override val bagCount: StateFlow<Int> = bag.asStateFlow()
-
     override suspend fun refresh(): Result<Unit> = attempt {
         val columns = Columns.raw("id, name, emoji, category, color, price_mxn, brands(id, name), product_variants(size, stock)")
         items.value = client.from("products")
@@ -199,10 +206,125 @@ class SupabaseProductRepository @Inject constructor(
         refresh().getOrThrow()
     }
 
-    override suspend fun addToBag(productId: String, size: String): Result<Unit> = attempt {
-        val product = items.value.firstOrNull { it.id == productId } ?: error("Producto no encontrado.")
-        if (!product.isAvailable(size)) throw OutOfStockException(size)
-        bag.update { it + 1 }
+    override suspend fun salesSummary(): Result<SalesSummary> = attempt {
+        val row = client.postgrest.rpc("brand_sales_summary").decodeList<SalesSummaryDto>().firstOrNull()
+        SalesSummary(
+            orders = row?.ordersCount?.toInt() ?: 0,
+            units = row?.units?.toInt() ?: 0,
+            gross = row?.grossMxn?.toInt() ?: 0,
+            commission = row?.commissionMxn?.toInt() ?: 0,
+            net = row?.netMxn?.toInt() ?: 0
+        )
+    }
+}
+
+/** Carrito en la tabla cart_items; el pago usa las funciones start_checkout y confirm_order (RN-01, RN-02). */
+@Singleton
+class SupabaseCartRepository @Inject constructor(
+    private val client: SupabaseClient
+) : CartRepository {
+
+    private val cart = MutableStateFlow<List<CartLine>>(emptyList())
+    override val lines: StateFlow<List<CartLine>> = cart.asStateFlow()
+
+    private val history = MutableStateFlow<List<Order>>(emptyList())
+    override val orders: StateFlow<List<Order>> = history.asStateFlow()
+
+    override suspend fun refresh(): Result<Unit> = attempt {
+        val columns = Columns.raw(
+            "id, quantity, variant_id, product_variants(size, stock, products(id, name, emoji, color, price_mxn, brands(name)))"
+        )
+        cart.value = client.from("cart_items").select(columns).decodeList<CartItemDto>().mapNotNull { dto ->
+            val variant = dto.variant ?: return@mapNotNull null
+            val product = variant.product ?: return@mapNotNull null
+            CartLine(
+                id = dto.id,
+                productId = product.id,
+                name = product.name,
+                brand = product.brands?.name.orEmpty(),
+                emoji = product.emoji ?: "🧥",
+                color = product.color.orEmpty(),
+                size = variant.size,
+                unitPrice = product.priceMxn.toInt(),
+                quantity = dto.quantity,
+                stock = variant.stock
+            )
+        }
+    }
+
+    override suspend fun add(productId: String, size: String, quantity: Int): Result<Unit> = attempt {
+        val variant = client.from("product_variants")
+            .select(Columns.list("id", "stock")) {
+                filter {
+                    eq("product_id", productId)
+                    eq("size", size)
+                }
+            }
+            .decodeList<VariantStockDto>().firstOrNull() ?: throw OutOfStockException(size)
+        if (variant.stock <= 0) throw OutOfStockException(size)
+        refresh().getOrThrow()
+        val existing = cart.value.firstOrNull { it.productId == productId && it.size == size }
+        val wanted = (existing?.quantity ?: 0) + quantity
+        if (wanted > variant.stock) error("Solo quedan ${variant.stock} en talla $size.")
+        if (existing != null) {
+            client.from("cart_items").update(QuantityUpdate(ShopRules.clampQuantity(wanted, variant.stock))) {
+                filter { eq("id", existing.id) }
+            }
+        } else {
+            client.from("cart_items").insert(CartInsert(variant.id, ShopRules.clampQuantity(quantity, variant.stock)))
+        }
+        refresh().getOrThrow()
+    }
+
+    override suspend fun setQuantity(lineId: String, quantity: Int): Result<Unit> = attempt {
+        val line = cart.value.firstOrNull { it.id == lineId } ?: return@attempt
+        val clamped = ShopRules.clampQuantity(quantity, line.stock)
+        cart.update { list -> list.map { if (it.id == lineId) it.copy(quantity = clamped) else it } }
+        client.from("cart_items").update(QuantityUpdate(clamped)) { filter { eq("id", lineId) } }
+    }
+
+    override suspend fun remove(lineId: String): Result<Unit> = attempt {
+        cart.update { list -> list.filterNot { it.id == lineId } }
+        client.from("cart_items").delete { filter { eq("id", lineId) } }
+    }
+
+    override suspend fun startCheckout(): Result<Long> = attempt {
+        val expires = client.postgrest.rpc("start_checkout").decodeAs<String>()
+        OffsetDateTime.parse(expires).toInstant().toEpochMilli()
+    }
+
+    override suspend fun confirmOrder(paymentRef: String, shippingAddress: String): Result<Order> = attempt {
+        val params = buildJsonObject {
+            put("p_payment_ref", paymentRef)
+            put("p_shipping_address", shippingAddress)
+        }
+        val orderId = client.postgrest.rpc("confirm_order", params).decodeAs<String>()
+        cart.value = emptyList()
+        refreshOrders().getOrThrow()
+        history.value.firstOrNull { it.id == orderId } ?: error("No encontramos tu pedido.")
+    }
+
+    override suspend fun refreshOrders(): Result<Unit> = attempt {
+        val columns = Columns.raw(
+            "id, created_at, status, subtotal_mxn, commission_mxn, total_mxn, " +
+                "order_items(product_name, brand_name, size, quantity, unit_price_mxn)"
+        )
+        history.value = client.from("orders")
+            .select(columns) { order("created_at", Order_.DESCENDING) }
+            .decodeList<OrderDto>()
+            .map { dto ->
+                Order(
+                    id = dto.id,
+                    createdAt = OffsetDateTime.parse(dto.createdAt)
+                        .atZoneSameInstant(ZoneId.systemDefault())
+                        .format(OrderDateFormat),
+                    status = dto.status.replaceFirstChar { it.uppercase() },
+                    lines = dto.items.map { OrderLine(it.productName, it.brandName, it.size, it.quantity, it.unitPriceMxn.toInt()) },
+                    subtotal = dto.subtotalMxn.toInt(),
+                    commission = dto.commissionMxn.toInt(),
+                    total = dto.totalMxn.toInt()
+                )
+            }
     }
 }
 

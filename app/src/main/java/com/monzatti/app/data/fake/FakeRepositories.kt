@@ -13,7 +13,17 @@ import com.monzatti.app.domain.repository.AuthRepository
 import com.monzatti.app.domain.repository.ClosetRepository
 import com.monzatti.app.domain.repository.MirrorProjection
 import com.monzatti.app.domain.repository.MirrorRepository
+import com.monzatti.app.domain.shop.CartLine
+import com.monzatti.app.domain.shop.CartRepository
+import com.monzatti.app.domain.shop.Order
+import com.monzatti.app.domain.shop.OrderLine
+import com.monzatti.app.domain.shop.SalesSummary
+import com.monzatti.app.domain.shop.ShopRules
 import com.monzatti.app.domain.tryon.TryOnItem
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlinx.coroutines.delay
 import com.monzatti.app.domain.repository.ProductRepository
 import com.monzatti.app.domain.repository.ProfileRepository
 import java.util.UUID
@@ -141,8 +151,8 @@ class FakeProductRepository @Inject constructor() : ProductRepository {
     )
     override val products: StateFlow<List<Product>> = items.asStateFlow()
 
-    private val bag = MutableStateFlow(0)
-    override val bagCount: StateFlow<Int> = bag.asStateFlow()
+    /** Pedidos pagados en esta sesión de demo, para el panel de ventas. */
+    private val sales = MutableStateFlow<List<Order>>(emptyList())
 
     override suspend fun refresh(): Result<Unit> = Result.success(Unit)
 
@@ -164,14 +174,148 @@ class FakeProductRepository @Inject constructor() : ProductRepository {
         return Result.success(Unit)
     }
 
-    override suspend fun addToBag(productId: String, size: String): Result<Unit> {
-        val product = items.value.firstOrNull { it.id == productId }
-            ?: return Result.failure(IllegalArgumentException("Producto no encontrado."))
-        if (!product.isAvailable(size)) return Result.failure(OutOfStockException(size))
-        bag.update { it + 1 }
-        return Result.success(Unit)
+    override suspend fun salesSummary(): Result<SalesSummary> {
+        // Cifras base de la demo + lo que se compre durante la presentación.
+        val orders = sales.value
+        val gross = 48_250 + orders.sumOf { it.subtotal }
+        val commission = ShopRules.commission(gross)
+        return Result.success(
+            SalesSummary(
+                orders = 32 + orders.size,
+                units = 41 + orders.sumOf { it.units },
+                gross = gross,
+                commission = commission,
+                net = gross - commission
+            )
+        )
+    }
+
+    fun stockOf(productId: String, size: String): Int =
+        items.value.firstOrNull { it.id == productId }?.stockBySize?.get(size) ?: 0
+
+    fun decrementStock(productId: String, size: String, quantity: Int) {
+        items.update { list ->
+            list.map { p ->
+                if (p.id != productId) p
+                else p.copy(stockBySize = p.stockBySize + (size to ((p.stockBySize[size] ?: 0) - quantity).coerceAtLeast(0)))
+            }
+        }
+    }
+
+    fun recordSale(order: Order) {
+        sales.update { it + order }
     }
 }
+
+/** Carrito y pedidos en memoria, con las mismas reglas que Supabase (RF-01, RN-01, RN-02). */
+@Singleton
+class FakeCartRepository @Inject constructor(private val catalog: FakeProductRepository) : CartRepository {
+
+    private val cart = MutableStateFlow<List<CartLine>>(emptyList())
+    override val lines: StateFlow<List<CartLine>> = cart.asStateFlow()
+
+    private val history = MutableStateFlow<List<Order>>(emptyList())
+    override val orders: StateFlow<List<Order>> = history.asStateFlow()
+
+    private var reservationExpiresAt: Long? = null
+
+    /** Retardo simulado de red; en pruebas se pone en 0. */
+    var simulatedDelayMs: Long = 700
+
+    override suspend fun refresh(): Result<Unit> {
+        // Actualiza existencias por si cambiaron (otra compra, el socio editó inventario).
+        cart.update { list -> list.map { it.copy(stock = catalog.stockOf(it.productId, it.size)) } }
+        return Result.success(Unit)
+    }
+
+    override suspend fun add(productId: String, size: String, quantity: Int): Result<Unit> {
+        val product = catalog.products.value.firstOrNull { it.id == productId }
+            ?: return Result.failure(IllegalArgumentException("Producto no encontrado."))
+        val stock = product.stockBySize[size] ?: 0
+        if (stock <= 0) return Result.failure(OutOfStockException(size))
+        val existing = cart.value.firstOrNull { it.productId == productId && it.size == size }
+        val wanted = (existing?.quantity ?: 0) + quantity
+        if (wanted > stock) return Result.failure(IllegalStateException("Solo quedan $stock en talla $size."))
+        if (existing != null) {
+            cart.update { list ->
+                list.map { if (it.id == existing.id) it.copy(quantity = ShopRules.clampQuantity(wanted, stock), stock = stock) else it }
+            }
+        } else {
+            cart.update {
+                it + CartLine(
+                    id = UUID.randomUUID().toString(),
+                    productId = product.id,
+                    name = product.name,
+                    brand = product.brand,
+                    emoji = product.emoji,
+                    color = product.color,
+                    size = size,
+                    unitPrice = product.price,
+                    quantity = ShopRules.clampQuantity(quantity, stock),
+                    stock = stock
+                )
+            }
+        }
+        reservationExpiresAt = null
+        return Result.success(Unit)
+    }
+
+    override suspend fun setQuantity(lineId: String, quantity: Int): Result<Unit> {
+        cart.update { list -> list.map { if (it.id == lineId) it.copy(quantity = ShopRules.clampQuantity(quantity, it.stock)) else it } }
+        reservationExpiresAt = null
+        return Result.success(Unit)
+    }
+
+    override suspend fun remove(lineId: String): Result<Unit> {
+        cart.update { list -> list.filterNot { it.id == lineId } }
+        reservationExpiresAt = null
+        return Result.success(Unit)
+    }
+
+    override suspend fun startCheckout(): Result<Long> {
+        delay(simulatedDelayMs)
+        val current = cart.value
+        if (current.isEmpty()) return Result.failure(IllegalStateException("Tu carrito está vacío."))
+        current.forEach { line ->
+            if (catalog.stockOf(line.productId, line.size) < line.quantity) {
+                return Result.failure(IllegalStateException("Ya no hay existencias de ${line.name} talla ${line.size}."))
+            }
+        }
+        val expires = System.currentTimeMillis() + ShopRules.RESERVATION_MINUTES * 60_000L
+        reservationExpiresAt = expires
+        return Result.success(expires)
+    }
+
+    override suspend fun confirmOrder(paymentRef: String, shippingAddress: String): Result<Order> {
+        delay(simulatedDelayMs * 2)
+        val expires = reservationExpiresAt
+        if (expires == null || System.currentTimeMillis() > expires) {
+            return Result.failure(IllegalStateException("Tu reserva expiró. Vuelve a intentar el pago."))
+        }
+        val current = cart.value
+        if (current.isEmpty()) return Result.failure(IllegalStateException("Tu carrito está vacío."))
+        current.forEach { catalog.decrementStock(it.productId, it.size, it.quantity) }
+        val subtotal = ShopRules.subtotal(current)
+        val order = Order(
+            id = UUID.randomUUID().toString(),
+            createdAt = LocalDateTime.now().format(OrderDateFormat),
+            status = "Pagado",
+            lines = current.map { OrderLine(it.name, it.brand, it.size, it.quantity, it.unitPrice) },
+            subtotal = subtotal,
+            commission = ShopRules.commission(subtotal),
+            total = subtotal + ShopRules.shipping(current)
+        )
+        history.update { listOf(order) + it }
+        catalog.recordSale(order)
+        cart.value = emptyList()
+        reservationExpiresAt = null
+        return Result.success(order)
+    }
+
+    override suspend fun refreshOrders(): Result<Unit> = Result.success(Unit)
+}
+
+internal val OrderDateFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Locale("es", "MX"))
 
 @Singleton
 class FakeMirrorRepository @Inject constructor() : MirrorRepository {

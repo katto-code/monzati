@@ -7,6 +7,7 @@ import com.monzatti.app.domain.model.SignUpRequest
 import com.monzatti.app.domain.model.StylePalette
 import com.monzatti.app.domain.model.UserProfile
 import com.monzatti.app.domain.model.UserRole
+import com.monzatti.app.domain.shop.SalesSummary
 import com.monzatti.app.domain.tryon.TryOnItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,8 +54,9 @@ interface MirrorRepository {
 
 interface ProductRepository {
     val products: StateFlow<List<Product>>
-    val bagCount: StateFlow<Int>
     suspend fun refresh(): Result<Unit>
     suspend fun publish(product: NewProduct): Result<Unit>
-    suspend fun addToBag(productId: String, size: String): Result<Unit>
+
+    /** Ventas de las marcas del socio con sesión. */
+    suspend fun salesSummary(): Result<SalesSummary>
 }

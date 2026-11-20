@@ -1,5 +1,30 @@
 package com.monzatti.app.ui.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -87,21 +112,158 @@ fun BackLink(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun PrimaryButton(text: String, onClick: () -> Unit, accent: Boolean = false, enabled: Boolean = true) {
+fun PrimaryButton(
+    text: String,
+    onClick: () -> Unit,
+    accent: Boolean = false,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    modifier: Modifier = Modifier.fillMaxWidth()
+) {
     val c = MonzattiTheme.colors
+    val content = if (accent) c.onAccent else c.onPrimary
     Button(
-        onClick = onClick,
+        onClick = { if (!loading) onClick() },
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.height(50.dp),
         shape = RoundedCornerShape(11.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (accent) c.accent else c.primary,
-            contentColor = if (accent) c.onAccent else c.onPrimary,
+            contentColor = content,
             disabledContainerColor = c.line,
             disabledContentColor = c.muted
         )
     ) {
-        Text(text, fontWeight = if (accent) FontWeight.SemiBold else FontWeight.Medium)
+        AnimatedContent(targetState = loading, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "button") { busy ->
+            if (busy) {
+                CircularProgressIndicator(Modifier.size(20.dp), color = content, strokeWidth = 2.dp)
+            } else {
+                Text(text, fontWeight = if (accent) FontWeight.SemiBold else FontWeight.Medium)
+            }
+        }
+    }
+}
+
+/** Rectángulo con brillo animado, para mostrar contenido que está cargando. */
+@Composable
+fun Skeleton(modifier: Modifier = Modifier, corner: Dp = 10.dp) {
+    val c = MonzattiTheme.colors
+    val transition = rememberInfiniteTransition(label = "skeleton")
+    val shift by transition.animateFloat(
+        initialValue = -1f,
+        targetValue = 2f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing)),
+        label = "shift"
+    )
+    Box(
+        modifier
+            .clip(RoundedCornerShape(corner))
+            .drawBehind {
+                val w = size.width
+                drawRect(
+                    Brush.linearGradient(
+                        listOf(c.surfaceVariant, c.surface.copy(alpha = 0.9f), c.surfaceVariant),
+                        start = Offset(w * shift - w, 0f),
+                        end = Offset(w * shift, size.height)
+                    )
+                )
+            }
+    )
+}
+
+/** Cuadrícula de tarjetas vacías mientras carga un catálogo o closet. */
+@Composable
+fun SkeletonGrid(cards: Int = 4, cardHeight: Dp = 200.dp) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        repeat((cards + 1) / 2) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Skeleton(Modifier.weight(1f).height(cardHeight), corner = 14.dp)
+                Skeleton(Modifier.weight(1f).height(cardHeight), corner = 14.dp)
+            }
+        }
+    }
+}
+
+/** Capa de carga a pantalla completa con un mensaje ("Procesando pago de prueba…"). */
+@Composable
+fun LoadingOverlay(visible: Boolean, message: String) {
+    val c = MonzattiTheme.colors
+    AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(c.background.copy(alpha = 0.88f))
+                .pointerInput(Unit) { detectTapGestures { } },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Brand()
+                CircularProgressIndicator(color = c.accent, trackColor = c.line, strokeWidth = 3.dp)
+                Text(message, color = c.ink, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+    }
+}
+
+/** Selector − n + para cantidades. */
+@Composable
+fun QuantityStepper(quantity: Int, onChange: (Int) -> Unit, max: Int) {
+    val c = MonzattiTheme.colors
+    Row(
+        Modifier.border(1.dp, c.line, CircleShape).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(onClick = { onChange(quantity - 1) }, enabled = quantity > 1, contentPadding = PaddingValues(0.dp)) {
+            Text("−", fontSize = 18.sp, color = if (quantity > 1) c.ink else c.line)
+        }
+        AnimatedContent(targetState = quantity, label = "qty") {
+            Text("$it", color = c.ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp))
+        }
+        TextButton(onClick = { onChange(quantity + 1) }, enabled = quantity < max, contentPadding = PaddingValues(0.dp)) {
+            Text("+", fontSize = 18.sp, color = if (quantity < max) c.ink else c.line)
+        }
+    }
+}
+
+/** Botón redondo con contador (carrito). */
+@Composable
+fun BadgeIconButton(icon: String, count: Int, onClick: () -> Unit) {
+    val c = MonzattiTheme.colors
+    Box(Modifier.size(44.dp).clip(CircleShape).background(c.surface).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Text(icon, fontSize = 18.sp)
+        AnimatedVisibility(
+            visible = count > 0,
+            enter = scaleIn() + fadeIn(),
+            exit = scaleOut() + fadeOut(),
+            modifier = Modifier.align(Alignment.TopEnd)
+        ) {
+            Box(Modifier.size(18.dp).background(c.accent, CircleShape), contentAlignment = Alignment.Center) {
+                Text("$count", color = c.onAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+/** Mensaje breve que aparece y se oculta solo. */
+@Composable
+fun Toast(message: String?, actionLabel: String? = null, onAction: () -> Unit = {}, onDismiss: () -> Unit) {
+    val c = MonzattiTheme.colors
+    LaunchedEffect(message) {
+        if (message != null) {
+            kotlinx.coroutines.delay(3500)
+            onDismiss()
+        }
+    }
+    AnimatedVisibility(visible = message != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+        Row(
+            Modifier.fillMaxWidth().background(c.primary, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(message.orEmpty(), color = c.onPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            if (actionLabel != null) {
+                TextButton(onClick = onAction) { Text(actionLabel, color = c.accent, fontWeight = FontWeight.SemiBold) }
+            }
+        }
     }
 }
 
