@@ -4,6 +4,14 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
+import android.content.Context
+import android.graphics.Bitmap
+import com.monzatti.app.data.remote.AiTryOnClient
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import com.monzatti.app.domain.model.GarmentSizes
 import com.monzatti.app.domain.repository.ClosetRepository
 import com.monzatti.app.domain.repository.MirrorProjection
@@ -31,8 +39,14 @@ class TryOnViewModel @Inject constructor(
     private val products: ProductRepository,
     private val cart: CartRepository,
     closet: ClosetRepository,
-    private val mirror: MirrorRepository
+    private val mirror: MirrorRepository,
+    private val ai: AiTryOnClient,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    private val _ai = MutableStateFlow<AiPhotoState>(AiPhotoState.Idle)
+    val aiState: StateFlow<AiPhotoState> = _ai.asStateFlow()
+    private var consentGiven = false
 
     val items: StateFlow<List<TryOnItem>> =
         combine(products.products, closet.garments) { shop, mine ->
@@ -83,6 +97,70 @@ class TryOnViewModel @Inject constructor(
             _message.value = cart.add(item.id, available)
                 .fold({ "Añadida al carrito · talla $available" }, { it.message })
         }
+    }
+
+    /** Botón "Foto con IA": pide consentimiento la primera vez y luego hace la cuenta regresiva. */
+    fun startAiPhoto(capture: suspend () -> Bitmap) {
+        if (selected.value == null) return
+        if (!ai.isConfigured) {
+            _ai.value = AiPhotoState.Failed(
+                "El servidor de IA no está configurado. Agrega TRYON_SERVER_URL y TRYON_SERVER_TOKEN en " +
+                    "local.properties (ver tryon-server/README.md)."
+            )
+            return
+        }
+        if (!consentGiven) {
+            _ai.value = AiPhotoState.Consent
+            pendingCapture = capture
+            return
+        }
+        runAiPhoto(capture)
+    }
+
+    private var pendingCapture: (suspend () -> Bitmap)? = null
+
+    fun acceptConsent() {
+        consentGiven = true
+        pendingCapture?.let { runAiPhoto(it) }
+        pendingCapture = null
+    }
+
+    private fun runAiPhoto(capture: suspend () -> Bitmap) {
+        val item = selected.value ?: return
+        viewModelScope.launch {
+            for (s in 3 downTo 1) {
+                _ai.value = AiPhotoState.Countdown(s)
+                delay(1000)
+            }
+            _ai.value = AiPhotoState.Generating
+            val result = runCatching {
+                val person = capture()
+                val (personBytes, garmentBytes) = withContext(Dispatchers.Default) {
+                    person.toJpeg() to garmentImageBytes(item)
+                }
+                val jpeg = ai.generate(personBytes, garmentBytes, item.kind.serverCategory()).getOrThrow()
+                withContext(Dispatchers.Default) { decodeJpeg(jpeg) }
+            }
+            _ai.value = result.fold(
+                { AiPhotoState.Result(it) },
+                { AiPhotoState.Failed(it.message ?: "No se pudo generar la foto.") }
+            )
+        }
+    }
+
+    /** Guarda la foto generada en "mis looks" (almacenamiento privado de la app). */
+    fun saveAiPhoto() {
+        val state = _ai.value as? AiPhotoState.Result ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val dir = File(context.filesDir, "looks").apply { mkdirs() }
+            File(dir, "look-${System.currentTimeMillis()}.jpg").writeBytes(state.bitmap.toJpeg(maxSide = 2048, quality = 95))
+            _ai.value = state.copy(saved = true)
+        }
+    }
+
+    fun dismissAi() {
+        _ai.value = AiPhotoState.Idle
+        pendingCapture = null
     }
 
     fun projectToMirror() {

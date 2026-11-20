@@ -4,6 +4,17 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -108,6 +119,9 @@ private fun TryOnCamera(onBack: () -> Unit, onOpenMirror: () -> Unit, viewModel:
     var windowStart by remember { mutableLongStateOf(System.nanoTime()) }
 
     var drag by remember { mutableFloatStateOf(0f) }
+    val controller = rememberPoseController()
+    val context = LocalContext.current
+    val aiState by viewModel.aiState.collectAsStateWithLifecycle()
     val garmentPhoto = rememberImageFile(selected?.imagePath)
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -127,7 +141,8 @@ private fun TryOnCamera(onBack: () -> Unit, onOpenMirror: () -> Unit, viewModel:
                 onCameraUnavailable = {
                     if (useFront) useFront = false else cameraMissing = true
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                controller = controller
             )
         }
 
@@ -202,8 +217,90 @@ private fun TryOnCamera(onBack: () -> Unit, onOpenMirror: () -> Unit, viewModel:
             onBag = viewModel::addToBag,
             onMirror = { viewModel.projectToMirror() },
             onOpenMirror = onOpenMirror,
+            onAiPhoto = { viewModel.startAiPhoto { controller.capturePhoto(context, mirror = useFront) } },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        AiPhotoOverlay(
+            state = aiState,
+            itemName = selected?.name.orEmpty(),
+            onAccept = viewModel::acceptConsent,
+            onSave = viewModel::saveAiPhoto,
+            onDismiss = viewModel::dismissAi
+        )
+    }
+}
+
+/** Capas de la foto con IA: consentimiento, cuenta regresiva, generando, resultado o error. */
+@Composable
+private fun AiPhotoOverlay(
+    state: AiPhotoState,
+    itemName: String,
+    onAccept: () -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val c = MonzattiTheme.colors
+    when (state) {
+        AiPhotoState.Idle -> Unit
+        is AiPhotoState.Countdown -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            AnimatedContent(targetState = state.seconds, transitionSpec = { (scaleIn() + fadeIn()) togetherWith fadeOut() }, label = "count") {
+                Text("$it", color = Color.White, fontSize = 120.sp, fontWeight = FontWeight.Bold)
+            }
+            Text(
+                "¡Posa de frente!",
+                color = Color.White,
+                fontSize = 18.sp,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 120.dp).background(Overlay, RoundedCornerShape(14.dp)).padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+        else -> Box(
+            Modifier.fillMaxSize().background(c.background.copy(alpha = 0.96f)).pointerInput(Unit) { detectTapGestures { } },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                when (state) {
+                    AiPhotoState.Consent -> {
+                        Text("📸", fontSize = 48.sp)
+                        Text("Foto realista con IA", color = c.ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Tomaremos una foto tuya y la enviaremos al servidor de IA de Monzatti para vestirte con «$itemName». " +
+                                "La foto no se guarda en el servidor: se borra al terminar.",
+                            color = c.muted, fontSize = 13.sp, textAlign = TextAlign.Center, lineHeight = 19.sp
+                        )
+                        PrimaryButton("Acepto, tomar foto", onClick = onAccept, accent = true)
+                        SecondaryButton("Ahora no", onClick = onDismiss)
+                    }
+                    AiPhotoState.Generating -> {
+                        CircularProgressIndicator(color = c.accent, trackColor = c.line, strokeWidth = 3.dp)
+                        Text("Vistiéndote con IA…", color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Esto tarda de 10 a 30 segundos.", color = c.muted, fontSize = 13.sp)
+                    }
+                    is AiPhotoState.Result -> {
+                        Image(
+                            state.bitmap.asImageBitmap(),
+                            contentDescription = "Foto generada con IA",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxWidth().weight(1f, fill = false).clip(RoundedCornerShape(18.dp))
+                        )
+                        Text(itemName, color = c.ink, fontWeight = FontWeight.SemiBold)
+                        PrimaryButton(if (state.saved) "✓ Guardada en mis looks" else "Guardar en mis looks", onClick = onSave, accent = true, enabled = !state.saved)
+                        SecondaryButton("Cerrar", onClick = onDismiss)
+                    }
+                    is AiPhotoState.Failed -> {
+                        Text("⚠", fontSize = 40.sp, color = c.ink)
+                        Text("No se pudo generar la foto", color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        Text(state.message, color = c.muted, fontSize = 13.sp, textAlign = TextAlign.Center, lineHeight = 19.sp)
+                        SecondaryButton("Cerrar", onClick = onDismiss)
+                    }
+                    else -> Unit
+                }
+            }
+        }
     }
 }
 
@@ -224,6 +321,7 @@ private fun BottomPanel(
     onBag: () -> Unit,
     onMirror: () -> Unit,
     onOpenMirror: () -> Unit,
+    onAiPhoto: () -> Unit,
     modifier: Modifier
 ) {
     val c = MonzattiTheme.colors
@@ -297,6 +395,13 @@ private fun BottomPanel(
                 colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent)
             ) { Text("◎  Al espejo", fontWeight = FontWeight.SemiBold) }
         }
+        Button(
+            onClick = onAiPhoto,
+            enabled = selected != null,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+            shape = RoundedCornerShape(11.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = c.surfaceVariant, contentColor = c.ink)
+        ) { Text("📸  Foto realista con IA", fontWeight = FontWeight.SemiBold) }
         Text(
             "Desliza de lado para cambiar de prenda · Ver espejo →",
             color = c.muted,

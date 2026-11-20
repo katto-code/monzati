@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo en builds de depuración (la demo): permite el servidor de IA por HTTP en la red local (misma Wi-Fi). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

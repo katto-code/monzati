@@ -48,6 +48,12 @@ private fun Pose.side(joints: Map<Joint, Int>): Map<Joint, Pt> = buildMap {
 
 fun Pose.toBodyFrame(): BodyFrame? = BodyFrame.from(side(leftJoints), side(rightJoints))
 
+@Composable
+fun rememberPoseController(): LifecycleCameraController {
+    val context = LocalContext.current
+    return remember { LifecycleCameraController(context) }
+}
+
 /**
  * Vista de cámara + detección de pose en el dispositivo (ML Kit). Los puntos llegan ya en
  * coordenadas de la vista (COORDINATE_SYSTEM_VIEW_REFERENCED), incluido el espejo de la cámara frontal.
@@ -57,7 +63,8 @@ fun PoseCameraPreview(
     useFrontCamera: Boolean,
     onPose: (BodyFrame?) -> Unit,
     onCameraUnavailable: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    controller: LifecycleCameraController = rememberPoseController()
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -69,12 +76,11 @@ fun PoseCameraPreview(
             PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.STREAM_MODE).build()
         )
     }
-    val controller = remember { LifecycleCameraController(context) }
-
     DisposableEffect(lifecycleOwner, useFrontCamera) {
         val executor = ContextCompat.getMainExecutor(context)
         val selector = if (useFrontCamera) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
-        controller.setEnabledUseCases(LifecycleCameraController.IMAGE_ANALYSIS)
+        // Análisis para la pose + captura para la foto con IA.
+        controller.setEnabledUseCases(LifecycleCameraController.IMAGE_ANALYSIS or LifecycleCameraController.IMAGE_CAPTURE)
         controller.imageAnalysisBackpressureStrategy = ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
         controller.setImageAnalysisAnalyzer(
             executor,

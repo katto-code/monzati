@@ -31,6 +31,9 @@ android {
 
         buildConfigField("String", "SUPABASE_URL", quoted("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", quoted("SUPABASE_ANON_KEY"))
+        // Servidor de fotos con IA (tryon-server/), opcional.
+        buildConfigField("String", "TRYON_SERVER_URL", quoted("TRYON_SERVER_URL"))
+        buildConfigField("String", "TRYON_SERVER_TOKEN", quoted("TRYON_SERVER_TOKEN"))
     }
 
     compileOptions {
