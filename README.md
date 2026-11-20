@@ -67,7 +67,11 @@ Ejecuta, en orden, en **SQL Editor** (o con la integración de Supabase):
 2. `supabase/migrations/20261120000000_tienda_carrito.sql` — carrito y funciones `start_checkout`, `confirm_order`,
    `brand_sales_summary`.
 3. `supabase/migrations/20261120010000_storage_prendas.sql` — bucket privado de fotos de prendas.
-4. `supabase/seed.sql` — catálogo de demostración (7 marcas ficticias, 8 productos).
+4. `supabase/migrations/20261120020000_permisos_funciones.sql` — cierra funciones internas a la API.
+5. `supabase/migrations/20261120030000_permisos_tablas.sql` — permisos de tablas (los proyectos nuevos no los dan solos).
+6. `supabase/seed.sql` — catálogo de demostración (7 marcas ficticias, 8 productos).
+
+Ya están aplicadas en el proyecto «monsati».
 
 Para probar sin confirmar correos: **Authentication → Providers → Email → Confirm email** desactivado.
 Si falla la conexión durante la presentación, en el acceso toca **«Usar modo demo (sin conexión)»**.

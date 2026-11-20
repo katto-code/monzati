@@ -20,6 +20,9 @@ import com.monzatti.app.domain.tryon.TryOnSource
 import com.monzatti.app.domain.repository.ProductRepository
 import com.monzatti.app.domain.repository.ProfileRepository
 import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.exception.AuthRestException
+import io.github.jan.supabase.exceptions.HttpRequestException
+import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.from
@@ -59,7 +62,36 @@ private inline fun <T> attempt(block: () -> T): Result<T> = try {
 } catch (e: CancellationException) {
     throw e
 } catch (e: Exception) {
-    Result.failure(e)
+    Result.failure(friendlyError(e))
+}
+
+/**
+ * Convierte errores de Supabase en mensajes para la persona. Nunca deja pasar detalles técnicos
+ * (URL, encabezados ni el token de sesión, que vienen dentro del mensaje original).
+ */
+internal fun friendlyError(e: Exception): Exception {
+    val message = when (e) {
+        is AuthRestException -> when (e.error) {
+            "invalid_credentials" -> "Correo o contraseña incorrectos."
+            "email_not_confirmed" -> "Confirma tu correo antes de entrar (revisa tu bandeja)."
+            "user_already_exists", "email_exists" -> "Ya existe una cuenta con ese correo."
+            "weak_password" -> "La contraseña es muy débil."
+            "over_email_send_rate_limit", "over_request_rate_limit" -> "Demasiados intentos. Espera unos minutos."
+            "email_address_invalid" -> "Ese correo no es válido."
+            else -> "No pudimos validar tu cuenta. Intenta de nuevo."
+        }
+        is RestException -> {
+            // Los mensajes que lanzan nuestras funciones SQL (raise exception) ya son para la persona.
+            val main = e.error.trim()
+            val technical = listOf("permission denied", "violates", "relation", "column", "syntax", "JWT", "function")
+            if (main.isNotEmpty() && technical.none { main.contains(it, ignoreCase = true) }) main
+            else "Algo salió mal con el servidor. Intenta de nuevo."
+        }
+        is HttpRequestException, is java.io.IOException -> "Sin conexión. Revisa tu internet o usa el modo demo."
+        is IllegalStateException, is IllegalArgumentException -> e.message ?: "Algo salió mal."
+        else -> "Algo salió mal. Intenta de nuevo."
+    }
+    return IllegalStateException(message, e)
 }
 
 private fun SupabaseClient.userIdOrThrow(): String =
