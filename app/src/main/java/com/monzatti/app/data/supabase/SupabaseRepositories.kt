@@ -30,6 +30,8 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order as Order_
 import io.github.jan.supabase.postgrest.rpc
+import android.util.Log
+import kotlinx.coroutines.withTimeoutOrNull
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.storage.storage
 import com.monzatti.app.data.local.GarmentImages
@@ -405,8 +407,16 @@ class SupabaseMirrorRepository @Inject constructor(
 
     private var channel: RealtimeChannel? = null
 
-    /** Avisa al espejo web (mirror/) por Supabase Realtime: llega en menos de un segundo (RF-02). */
+    /**
+     * Avisa al espejo web (mirror/) por Supabase Realtime: llega en menos de un segundo (RF-02).
+     * Si Realtime no responde en 5 s no se bloquea la app: la fila de mirror_sessions ya quedó guardada.
+     */
     private suspend fun broadcast(item: TryOnItem?, projecting: Boolean) {
+        withTimeoutOrNull(5_000) { sendBroadcast(item, projecting) }
+            ?: Log.w("Monzatti", "El espejo no recibió el aviso por Realtime a tiempo")
+    }
+
+    private suspend fun sendBroadcast(item: TryOnItem?, projecting: Boolean) {
         val ch = channel ?: client.channel("mirror:${MirrorRepository.MIRROR_CODE}").also {
             it.subscribe(blockUntilSubscribed = true)
             channel = it

@@ -77,7 +77,7 @@ dependencies {
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.realtime)
     implementation(libs.supabase.storage)
-    implementation(libs.ktor.client.android)
+    implementation(libs.ktor.client.okhttp)
 
     // Probador con cámara: vista previa + detección de pose en el dispositivo.
     implementation(libs.camerax.camera2)
