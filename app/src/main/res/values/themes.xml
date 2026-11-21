@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash de arranque: fondo negro Monzatti con el monograma dorado. -->
+    <style name="Theme.Monzatti.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#171717</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_monogram</item>
+        <item name="postSplashScreenTheme">@style/Theme.Monzatti</item>
+    </style>
+
+    <style name="Theme.Monzatti" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/monzatti_canvas</item>
+    </style>
+</resources>

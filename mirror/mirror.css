@@ -1,0 +1,160 @@
+:root {
+  --ink: #f5f3ee;
+  --muted: #b9b5ad;
+  --gold: #c9a227;
+  --glass: rgba(17, 17, 17, 0.62);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0d0d0d;
+  color: var(--ink);
+  font-family: "Poppins", system-ui, sans-serif;
+}
+
+/* La cámara se ve como espejo. */
+#video, #scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+#video { object-fit: cover; transform: scaleX(-1); }
+#scene { pointer-events: none; }
+
+body.demo #video { display: none; }
+body.demo {
+  background: radial-gradient(ellipse at 50% 35%, #2a2723 0%, #111 60%, #0a0a0a 100%);
+}
+
+.top, .bottom {
+  position: fixed;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  gap: 16px;
+}
+.top { top: 0; }
+.bottom { bottom: 0; align-items: flex-end; }
+
+.brand {
+  color: var(--gold);
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  font-size: 15px;
+}
+.brand span { color: var(--muted); font-weight: 500; letter-spacing: 0.08em; }
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--glass);
+  backdrop-filter: blur(8px);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+.status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff453a;
+}
+.status.live i { background: #4cd964; box-shadow: 0 0 10px #4cd964; }
+.status.demo i { background: var(--gold); }
+
+.garment {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--glass);
+  backdrop-filter: blur(8px);
+  padding: 14px 20px;
+  border-radius: 18px;
+  transition: opacity .3s;
+}
+.swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .5);
+  transition: background .4s;
+}
+.brandline { font-size: 11px; letter-spacing: .18em; color: var(--muted); }
+.name { font-size: 22px; font-weight: 600; }
+
+.keys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+kbd {
+  font-family: inherit;
+  border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin-right: 3px;
+}
+#link.on { color: var(--gold); }
+
+.hint {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--glass);
+  backdrop-filter: blur(8px);
+  padding: 16px 24px;
+  border-radius: 16px;
+  font-size: 16px;
+  text-align: center;
+  max-width: 80vw;
+  transition: opacity .3s;
+}
+.hint.hidden { opacity: 0; }
+
+.loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  background: #111;
+  transition: opacity .5s;
+  z-index: 10;
+}
+.loading.hidden { opacity: 0; pointer-events: none; }
+.loading p { color: var(--muted); margin: 0; }
+.spinner {
+  width: 42px;
+  height: 42px;
+  border: 3px solid rgba(255, 255, 255, .12);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Cambio de prenda */
+.garment.swap { animation: swap .45s ease; }
+@keyframes swap { 0% { opacity: .2; transform: translateY(6px); } 100% { opacity: 1; transform: none; } }
+
+@media (max-width: 640px) {
+  .keys { display: none; }
+  .top, .bottom { padding: 16px; }
+}

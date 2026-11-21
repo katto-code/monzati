@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monzatti Mirror</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="mirror.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs",
+        "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm"
+      }
+    }
+  </script>
+</head>
+<body>
+  <video id="video" playsinline muted></video>
+  <canvas id="scene"></canvas>
+
+  <header class="top">
+    <div class="brand">MONZATTI <span>· Mirror 01</span></div>
+    <div class="status" id="status"><i></i><span>Iniciando…</span></div>
+  </header>
+
+  <div class="loading" id="loading">
+    <div class="brand">MONZATTI</div>
+    <div class="spinner"></div>
+    <p id="loadingText">Preparando el espejo…</p>
+  </div>
+
+  <div class="hint" id="hint">Colócate de frente a 1–2 m, con hombros y cadera a la vista</div>
+
+  <footer class="bottom">
+    <div class="garment">
+      <div class="swatch" id="swatch"></div>
+      <div>
+        <div class="brandline" id="garmentBrand">FRANCESA</div>
+        <div class="name" id="garmentName">Blusa de seda</div>
+      </div>
+    </div>
+    <div class="keys">
+      <span><kbd>←</kbd><kbd>→</kbd> prenda</span>
+      <span><kbd>D</kbd> maniquí 360°</span>
+      <span><kbd>F</kbd> pantalla completa</span>
+      <span id="link">Sin vincular a la app</span>
+    </div>
+  </footer>
+
+  <script type="module" src="mirror.js"></script>
+</body>
+</html>

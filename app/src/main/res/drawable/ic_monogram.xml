@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monograma "M" de Monzatti en dorado, centrado en un lienzo de 108dp (ícono adaptable y splash). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#C9A227"
+        android:pathData="M33,72 L33,36 L41,36 L54,55 L67,36 L75,36 L75,72 L68,72 L68,48 L56.5,64.5 L51.5,64.5 L40,48 L40,72 Z" />
+    <path
+        android:fillColor="#C9A227"
+        android:pathData="M33,77 L75,77 L75,79 L33,79 Z" />
+</vector>
