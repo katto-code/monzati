@@ -9,6 +9,9 @@ import com.monzatti.app.data.StyleRepositoryImpl
 import com.monzatti.app.data.fake.FakeAuthRepository
 import com.monzatti.app.data.fake.FakeClosetRepository
 import com.monzatti.app.data.fake.FakeMirrorRepository
+import com.monzatti.app.data.update.NoUpdatesRepository
+import com.monzatti.app.data.update.SupabaseUpdateRepository
+import com.monzatti.app.domain.update.UpdateRepository
 import com.monzatti.app.data.fake.FakeCartRepository
 import com.monzatti.app.data.supabase.SupabaseCartRepository
 import com.monzatti.app.domain.shop.CartRepository
@@ -101,6 +104,14 @@ object AppModule {
         fake: Provider<FakeCartRepository>,
         supabase: Provider<SupabaseCartRepository>
     ): CartRepository = if (config.isConfigured) supabase.get() else fake.get()
+
+    @Provides
+    @Singleton
+    fun provideUpdateRepository(
+        config: SupabaseConfig,
+        none: Provider<NoUpdatesRepository>,
+        supabase: Provider<SupabaseUpdateRepository>
+    ): UpdateRepository = if (config.isConfigured) supabase.get() else none.get()
 
     @Provides
     @Singleton

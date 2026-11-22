@@ -10,7 +10,8 @@ fotos con IA**.
 | `mirror/` | Espejo 3D web: webcam + MediaPipe Pose + Three.js → [mirror/README.md](mirror/README.md) |
 | `tryon-server/` | Servidor de fotos con IA para la PC con NVIDIA → [tryon-server/README.md](tryon-server/README.md) |
 | `supabase/` | Esquema de base de datos (migraciones) y catálogo de demostración (`seed.sql`) |
-| `docs/` | Diseño, [guía de modelado 3D](docs/guia-modelado-3d.md) y [guion de la demo](docs/guion-demo.md) |
+| `docs/` | Diseño, [guía de modelado 3D](docs/guia-modelado-3d.md), [guion de la demo](docs/guion-demo.md) y [actualizaciones](docs/actualizaciones.md) |
+| `scripts/` | `publicar-version.ps1`: compila la APK firmada y prepara su publicación |
 
 ## App: abrir y ejecutar
 
@@ -38,13 +39,16 @@ Sin configuración, la app funciona en **modo demo** con datos de ejemplo en mem
 - **Tienda:** catálogo con filtros, detalle con tallas y existencias, **carrito**, pago de prueba con reserva de 10 min,
   confirmación e historial de pedidos.
 - **Socio comercial:** ventas con comisión (12 %), alta de productos e inventario por talla.
+- **Actualizaciones dentro de la app:** aviso al abrir, descarga con progreso, verificación SHA-256 e instalación
+  (→ [docs/actualizaciones.md](docs/actualizaciones.md)).
 - Splash, ícono, transiciones, pantallas de carga y **modo demo** de respaldo para la presentación.
 
 ### Arquitectura
 
 Por capas en un solo módulo: `domain/` (modelos y reglas, Kotlin puro) · `data/` (`fake/` demo, `supabase/`,
 `local/`, `remote/`) · `di/` (Hilt elige Supabase o demo) · `core/` (tema y configuración) · `ui/` (una carpeta por
-pantalla con su ViewModel). Versiones de librerías en `gradle/libs.versions.toml`. 29 pruebas unitarias.
+pantalla con su ViewModel). Versiones de librerías en `gradle/libs.versions.toml`; versión de la app en
+`gradle.properties`. 31 pruebas unitarias.
 
 ## Configuración (`local.properties`, no se sube a git)
 
@@ -56,6 +60,12 @@ SUPABASE_ANON_KEY=tu-clave-publicable
 # Servidor de fotos con IA (opcional)
 TRYON_SERVER_URL=https://tu-servidor
 TRYON_SERVER_TOKEN=la-misma-clave-del-servidor
+
+# Llave de firma de release, para publicar actualizaciones (docs/actualizaciones.md)
+RELEASE_STORE_FILE=monzatti-release.jks
+RELEASE_STORE_PASSWORD=...
+RELEASE_KEY_ALIAS=monzatti
+RELEASE_KEY_PASSWORD=...
 ```
 
 ## Supabase
@@ -69,7 +79,9 @@ Ejecuta, en orden, en **SQL Editor** (o con la integración de Supabase):
 3. `supabase/migrations/20261120010000_storage_prendas.sql` — bucket privado de fotos de prendas.
 4. `supabase/migrations/20261120020000_permisos_funciones.sql` — cierra funciones internas a la API.
 5. `supabase/migrations/20261120030000_permisos_tablas.sql` — permisos de tablas (los proyectos nuevos no los dan solos).
-6. `supabase/seed.sql` — catálogo de demostración (7 marcas ficticias, 8 productos).
+6. `supabase/migrations/20261121000000_actualizaciones.sql` — versiones de la app (`app_releases`) y bucket público
+   `releases` para las APK.
+7. `supabase/seed.sql` — catálogo de demostración (7 marcas ficticias, 8 productos).
 
 Ya están aplicadas en el proyecto «monsati».
 

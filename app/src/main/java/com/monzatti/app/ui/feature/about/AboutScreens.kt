@@ -12,6 +12,7 @@ import com.monzatti.app.ui.components.MutedText
 import com.monzatti.app.ui.components.PrimaryButton
 import com.monzatti.app.ui.components.ScreenColumn
 import com.monzatti.app.ui.components.Title
+import com.monzatti.app.ui.feature.update.VersionCard
 
 @Composable
 fun AboutScreen(onBack: () -> Unit, onNext: () -> Unit) {
@@ -23,6 +24,7 @@ fun AboutScreen(onBack: () -> Unit, onNext: () -> Unit) {
         MutedText("Los socios comerciales gestionan productos, inventario y ventas. Un espejo inteligente proyecta el atuendo elegido.")
         Spacer(Modifier.height(16.dp))
         PrimaryButton("Ver objetivo y alcance  →", onClick = onNext, accent = true)
+        VersionCard()
     }
 }
 

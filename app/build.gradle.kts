@@ -16,6 +16,13 @@ val localProperties = Properties().apply {
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
+// Versión de la app: se sube en gradle.properties antes de publicar una actualización.
+val appVersionCode = (findProperty("monzatti.versionCode") as String).toInt()
+val appVersionName = findProperty("monzatti.versionName") as String
+
+// Llave de firma de release (ver docs/actualizaciones.md). Sin ella, la APK de release sale sin firmar.
+val releaseKeystore = localProperties.getProperty("RELEASE_STORE_FILE")?.trim()?.takeIf { it.isNotEmpty() }
+
 fun quoted(key: String): String = "\"" + (localProperties.getProperty(key) ?: "").trim() + "\""
 
 android {
@@ -26,14 +33,43 @@ android {
         applicationId = "com.monzatti.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         buildConfigField("String", "SUPABASE_URL", quoted("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", quoted("SUPABASE_ANON_KEY"))
         // Servidor de fotos con IA (tryon-server/), opcional.
         buildConfigField("String", "TRYON_SERVER_URL", quoted("TRYON_SERVER_URL"))
         buildConfigField("String", "TRYON_SERVER_TOKEN", quoted("TRYON_SERVER_TOKEN"))
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = rootProject.file(releaseKeystore)
+                storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS")
+                keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            // Las builds de depuración buscan actualizaciones en el canal de pruebas.
+            buildConfigField("String", "UPDATE_CHANNEL", "\"pruebas\"")
+        }
+        release {
+            buildConfigField("String", "UPDATE_CHANNEL", "\"estable\"")
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+            // Solo celulares ARM de 64 bits y librerías comprimidas: la APK cabe en el límite de 50 MB de Supabase Storage.
+            ndk { abiFilters += "arm64-v8a" }
+        }
+    }
+
+    packaging {
+        jniLibs { useLegacyPackaging = true }
     }
 
     compileOptions {

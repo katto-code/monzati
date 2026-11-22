@@ -5,6 +5,9 @@ local.properties
 *.iml
 .kotlin/
 mirror/config.js
+dist/
+*.jks
+*.keystore
 tryon-server/.venv/
 tryon-server/CatVTON/
 __pycache__/

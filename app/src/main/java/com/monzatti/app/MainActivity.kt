@@ -21,6 +21,7 @@ import com.monzatti.app.core.theme.colors
 import com.monzatti.app.domain.model.StylePalette
 import com.monzatti.app.domain.repository.StyleRepository
 import com.monzatti.app.ui.navigation.MonzattiNavHost
+import com.monzatti.app.ui.feature.update.UpdateHost
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
             }
             MonzattiTheme(style) {
                 MonzattiNavHost()
+                UpdateHost()
             }
         }
     }
