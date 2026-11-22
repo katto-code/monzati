@@ -60,7 +60,8 @@ private fun MonzattiColors.animated(): MonzattiColors {
         accent = animateColorAsState(accent, spec, label = "accent").value,
         onAccent = animateColorAsState(onAccent, spec, label = "onAccent").value,
         brand = animateColorAsState(brand, spec, label = "brand").value,
-        positive = animateColorAsState(positive, spec, label = "positive").value
+        positive = animateColorAsState(positive, spec, label = "positive").value,
+        error = animateColorAsState(error, spec, label = "error").value
     )
 }
 
@@ -86,7 +87,8 @@ fun MonzattiTheme(palette: StylePalette, animate: Boolean = true, content: @Comp
             surface = c.surface, onSurface = c.ink,
             surfaceVariant = c.surfaceVariant, onSurfaceVariant = c.muted,
             surfaceContainer = c.surface, surfaceContainerLow = c.surface, surfaceContainerHigh = c.surface,
-            outline = c.muted, outlineVariant = c.line
+            outline = c.muted, outlineVariant = c.line,
+            error = c.error
         )
     } else {
         lightColorScheme(
@@ -97,7 +99,8 @@ fun MonzattiTheme(palette: StylePalette, animate: Boolean = true, content: @Comp
             surface = c.surface, onSurface = c.ink,
             surfaceVariant = c.surfaceVariant, onSurfaceVariant = c.muted,
             surfaceContainer = c.surface, surfaceContainerLow = c.surface, surfaceContainerHigh = c.surface,
-            outline = c.muted, outlineVariant = c.line
+            outline = c.muted, outlineVariant = c.line,
+            error = c.error
         )
     }
     CompositionLocalProvider(LocalMonzattiColors provides c) {

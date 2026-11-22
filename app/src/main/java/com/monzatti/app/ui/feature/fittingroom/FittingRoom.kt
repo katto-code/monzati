@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,11 +24,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.monzatti.app.core.theme.MonzattiTheme
-import com.monzatti.app.domain.model.GarmentSizes
+import com.monzatti.app.domain.model.Measurements
 import com.monzatti.app.domain.repository.MirrorProjection
+import com.monzatti.app.domain.repository.ProfileRepository
+import com.monzatti.app.ui.components.AppTextField
+import com.monzatti.app.ui.components.SkeletonGrid
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import com.monzatti.app.domain.repository.MirrorRepository
 import com.monzatti.app.ui.components.BackLink
-import com.monzatti.app.ui.components.ChoiceRow
 import com.monzatti.app.ui.components.ErrorText
 import com.monzatti.app.ui.components.FieldLabel
 import com.monzatti.app.ui.components.InfoCard
@@ -49,19 +55,35 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class FittingState(val heightCm: Float = 168f, val size: String = "M")
-
-/** 5. Proyección y medidas. */
+/** 5. Proyección y medidas: las medidas se guardan en el perfil (RF-03). */
 @HiltViewModel
-class FittingRoomViewModel @Inject constructor() : ViewModel() {
-    private val _state = MutableStateFlow(FittingState())
-    val state: StateFlow<FittingState> = _state.asStateFlow()
+class FittingRoomViewModel @Inject constructor(private val profile: ProfileRepository) : ViewModel() {
+    private val _measurements = MutableStateFlow<Measurements?>(null)
+    val measurements: StateFlow<Measurements?> = _measurements.asStateFlow()
 
-    fun setHeight(value: Float) = _state.update { it.copy(heightCm = value) }
-    fun setSize(value: String) = _state.update { it.copy(size = value) }
+    private val _saving = MutableStateFlow(false)
+    val saving: StateFlow<Boolean> = _saving.asStateFlow()
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            profile.measurements()
+                .onSuccess { _measurements.value = it }
+                .onFailure { _measurements.value = Measurements(); _message.value = it.message }
+        }
+    }
+
+    fun save(m: Measurements) = viewModelScope.launch {
+        _saving.value = true
+        profile.saveMeasurements(m)
+            .onSuccess { _measurements.value = m; _message.value = "Medidas guardadas." }
+            .onFailure { _message.value = it.message }
+        _saving.value = false
+    }
 }
 
 @Composable
@@ -70,7 +92,9 @@ fun FittingRoomScreen(
     onMirror: () -> Unit,
     viewModel: FittingRoomViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val saved by viewModel.measurements.collectAsStateWithLifecycle()
+    val saving by viewModel.saving.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
     val c = MonzattiTheme.colors
     ScreenColumn {
         Title("Proyección y medidas")
@@ -80,23 +104,60 @@ fun FittingRoomScreen(
             MutedText("Tu cámara detecta tu postura y la prenda te sigue al moverte.")
             Box(Modifier.padding(top = 10.dp)) { PrimaryButton("📷  Probar con cámara", onClick = onCamera, accent = true) }
         }
-        FieldLabel("TU AVATAR · VISTA FRONTAL")
-        Box(
-            Modifier.fillMaxWidth().height(230.dp).background(c.surfaceVariant, RoundedCornerShape(14.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("🧍", fontSize = 112.sp, modifier = Modifier.padding(bottom = ((state.heightCm - 150f) / 3).dp))
+        val m = saved
+        if (m == null) {
+            SkeletonGrid(cards = 2, cardHeight = 120.dp)
+        } else {
+            MeasurementsForm(m, saving, onSave = viewModel::save)
         }
-        SurfaceCard {
-            FieldLabel("TUS MEDIDAS")
-            Text("Altura: ${state.heightCm.toInt()} cm", fontWeight = FontWeight.SemiBold, color = c.ink)
-            Slider(value = state.heightCm, onValueChange = viewModel::setHeight, valueRange = 150f..190f)
-            MutedText("Busto 90 cm · Cintura 70 cm")
-        }
-        FieldLabel("TALLA")
-        ChoiceRow(GarmentSizes, state.size, viewModel::setSize)
-        InfoCard("Ajuste recomendado: ${state.size}")
+        message?.let { MutedText(it) }
         SecondaryButton("◎  Ver mi espejo", onClick = onMirror)
+    }
+}
+
+@Composable
+private fun MeasurementsForm(saved: Measurements, saving: Boolean, onSave: (Measurements) -> Unit) {
+    val c = MonzattiTheme.colors
+    fun Double?.text() = this?.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() }.orEmpty()
+    var height by rememberSaveable(saved) { mutableStateOf(saved.heightCm.text()) }
+    var bust by rememberSaveable(saved) { mutableStateOf(saved.bustCm.text()) }
+    var waist by rememberSaveable(saved) { mutableStateOf(saved.waistCm.text()) }
+    var hip by rememberSaveable(saved) { mutableStateOf(saved.hipCm.text()) }
+    fun String.cm() = replace(',', '.').toDoubleOrNull()
+    val draft = Measurements(height.cm(), bust.cm(), waist.cm(), hip.cm())
+    // Mismos límites que la tabla profiles, para no mandar algo que la base rechace.
+    val invalid = listOf(height to (100.0..230.0), bust to (1.0..300.0), waist to (1.0..300.0), hip to (1.0..300.0))
+        .any { (text, range) -> text.isNotBlank() && text.cm()?.let { it in range } != true }
+
+    FieldLabel("TU AVATAR · VISTA FRONTAL")
+    Box(
+        Modifier.fillMaxWidth().height(230.dp).background(c.surfaceVariant, RoundedCornerShape(14.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        val h = (draft.heightCm ?: 168.0).toFloat().coerceIn(140f, 200f)
+        Text("🧍", fontSize = 112.sp, modifier = Modifier.padding(bottom = ((h - 140f) / 3).dp))
+    }
+    SurfaceCard {
+        FieldLabel("TUS MEDIDAS (CM)")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MeasureField("Altura", height, { height = it }, Modifier.weight(1f))
+            MeasureField("Busto", bust, { bust = it }, Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MeasureField("Cintura", waist, { waist = it }, Modifier.weight(1f))
+            MeasureField("Cadera", hip, { hip = it }, Modifier.weight(1f))
+        }
+        if (invalid) ErrorText("Revisa las medidas: la altura va de 100 a 230 cm.")
+    }
+    InfoCard(draft.suggestedSize?.let { "Talla sugerida por tu busto: $it" } ?: "Escribe tu busto para sugerirte una talla.")
+    PrimaryButton("Guardar medidas", onClick = { onSave(draft) }, loading = saving, enabled = !invalid && draft != saved)
+}
+
+@Composable
+private fun MeasureField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier) {
+    androidx.compose.foundation.layout.Column(modifier) {
+        MutedText(label)
+        AppTextField(value, onChange, placeholder = "cm", number = true)
     }
 }
 
@@ -128,9 +189,15 @@ fun MirrorScreen(onBack: () -> Unit, onCamera: () -> Unit, viewModel: MirrorView
     val c = MonzattiTheme.colors
     val item = projection.item
     ScreenColumn {
-        BackLink("← Volver", onBack)
+        BackLink("Volver", onBack)
         Title("Tu reflejo, reinventado.")
-        InfoCard("◎  MONZATTI Mirror 01 · ${if (projection.projecting) "Proyectando" else "Conectado"}")
+        val status = when {
+            item == null -> "En espera"
+            !projection.projecting -> "En pausa"
+            projection.live -> "Proyectando · aviso enviado"
+            else -> "Guardado · sin aviso en vivo"
+        }
+        InfoCard("◎  MONZATTI Mirror 01 · $status")
         // La pantalla del espejo siempre es oscura, como el hardware real.
         Box(
             Modifier
@@ -150,7 +217,7 @@ fun MirrorScreen(onBack: () -> Unit, onCamera: () -> Unit, viewModel: MirrorView
                 Text(
                     "EN VIVO · ${item.name}",
                     color = c.accent,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)
                 )

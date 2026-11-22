@@ -1,5 +1,14 @@
 package com.monzatti.app.ui.feature.tryon
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.graphics.vector.ImageVector
+
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -175,7 +184,7 @@ private fun TryOnCamera(onBack: () -> Unit, onOpenMirror: () -> Unit, viewModel:
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            RoundIcon("←", onBack)
+            RoundIcon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", onBack)
             Row(
                 Modifier.background(Overlay, CircleShape).padding(horizontal = 12.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -184,11 +193,11 @@ private fun TryOnCamera(onBack: () -> Unit, onOpenMirror: () -> Unit, viewModel:
                 Spacer(Modifier.width(7.dp))
                 Text(
                     if (frame != null) "EN VIVO · $fps fps" else "BUSCANDO CUERPO",
-                    color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp
+                    color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp
                 )
             }
             Spacer(Modifier.weight(1f))
-            RoundIcon("⟲") { useFront = !useFront; smoother.reset(); frame = null }
+            RoundIcon(Icons.Filled.Cameraswitch, "Cambiar de cámara") { useFront = !useFront; smoother.reset(); frame = null }
         }
 
         // Guía cuando no hay cuerpo en cuadro.
@@ -265,7 +274,7 @@ private fun AiPhotoOverlay(
             ) {
                 when (state) {
                     AiPhotoState.Consent -> {
-                        Text("📸", fontSize = 48.sp)
+                        Icon(Icons.Outlined.PhotoCamera, contentDescription = null, tint = c.ink, modifier = Modifier.size(48.dp))
                         Text("Foto realista con IA", color = c.ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
                         Text(
                             "Tomaremos una foto tuya y la enviaremos al servidor de IA de Monzatti para vestirte con «$itemName». " +
@@ -288,11 +297,11 @@ private fun AiPhotoOverlay(
                             modifier = Modifier.fillMaxWidth().weight(1f, fill = false).clip(RoundedCornerShape(18.dp))
                         )
                         Text(itemName, color = c.ink, fontWeight = FontWeight.SemiBold)
-                        PrimaryButton(if (state.saved) "✓ Guardada en mis looks" else "Guardar en mis looks", onClick = onSave, accent = true, enabled = !state.saved)
+                        PrimaryButton(if (state.saved) "Guardada en mis looks" else "Guardar en mis looks", onClick = onSave, accent = true, enabled = !state.saved, icon = if (state.saved) Icons.Filled.Check else null)
                         SecondaryButton("Cerrar", onClick = onDismiss)
                     }
                     is AiPhotoState.Failed -> {
-                        Text("⚠", fontSize = 40.sp, color = c.ink)
+                        Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = c.ink, modifier = Modifier.size(40.dp))
                         Text("No se pudo generar la foto", color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                         Text(state.message, color = c.muted, fontSize = 13.sp, textAlign = TextAlign.Center, lineHeight = 19.sp)
                         SecondaryButton("Cerrar", onClick = onDismiss)
@@ -305,11 +314,11 @@ private fun AiPhotoOverlay(
 }
 
 @Composable
-private fun RoundIcon(icon: String, onClick: () -> Unit) {
+private fun RoundIcon(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
     Box(
         Modifier.size(44.dp).background(Overlay, CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center
-    ) { Text(icon, color = Color.White, fontSize = 20.sp) }
+    ) { Icon(icon, contentDescription = contentDescription, tint = Color.White) }
 }
 
 @Composable
@@ -340,7 +349,7 @@ private fun BottomPanel(
         if (selected != null) {
             Row(Modifier.padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(selected.subtitle.uppercase(), color = c.muted, fontSize = 10.sp, letterSpacing = 1.1.sp)
+                    Text(selected.subtitle.uppercase(), color = c.muted, fontSize = 12.sp, letterSpacing = 1.1.sp)
                     Text(selected.name, color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 }
                 selected.price?.let { Text(com.monzatti.app.domain.shop.mxn(it), color = c.ink, fontWeight = FontWeight.SemiBold) }
@@ -402,12 +411,15 @@ private fun BottomPanel(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                 shape = RoundedCornerShape(11.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = c.surfaceVariant, contentColor = c.ink)
-            ) { Text("📸  Foto realista con IA", fontWeight = FontWeight.SemiBold) }
+            ) {
+                Icon(Icons.Outlined.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("  Foto realista con IA", fontWeight = FontWeight.SemiBold)
+            }
         }
         Text(
-            "Desliza de lado para cambiar de prenda · Ver espejo →",
+            "Desliza de lado para cambiar de prenda · Ver espejo",
             color = c.muted,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenMirror)
         )

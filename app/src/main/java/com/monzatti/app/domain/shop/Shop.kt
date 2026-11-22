@@ -1,5 +1,8 @@
 package com.monzatti.app.domain.shop
 
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.flow.StateFlow
 
 /** Una partida del carrito: un producto en una talla. */
@@ -31,8 +34,23 @@ data class Order(
     val commission: Int,
     val total: Int
 ) {
-    val shortId: String get() = "MZ-" + id.replace("-", "").takeLast(6).uppercase()
+    val shortId: String get() = orderShortId(id)
     val units: Int get() = lines.sumOf { it.quantity }
+}
+
+fun orderShortId(id: String): String = "MZ-" + id.replace("-", "").takeLast(6).uppercase()
+
+/** Pedido visto por el socio: solo las partidas de su marca. */
+data class BrandOrder(
+    val id: String,
+    val createdAt: LocalDateTime,
+    val status: String,
+    val lines: List<OrderLine>,
+    /** True cuando el socio ya envió todas las partidas de su marca. */
+    val shipped: Boolean
+) {
+    val shortId: String get() = orderShortId(id)
+    val total: Int get() = lines.sumOf { it.unitPrice * it.quantity }
 }
 
 data class SalesSummary(val orders: Int, val units: Int, val gross: Int, val commission: Int, val net: Int)
@@ -55,6 +73,16 @@ object ShopRules {
     fun total(lines: List<CartLine>): Int = subtotal(lines) + shipping(lines)
 
     fun commission(subtotal: Int): Int = Math.round(subtotal * COMMISSION_RATE).toInt()
+
+    /** Ventas por semana (bloques de 7 días hacia atrás desde hoy; la última es la actual), para la gráfica. */
+    fun weeklySales(orders: List<BrandOrder>, today: LocalDate, weeks: Int = 12): List<Int> {
+        val buckets = IntArray(weeks)
+        orders.forEach { order ->
+            val ago = ChronoUnit.WEEKS.between(order.createdAt.toLocalDate(), today).toInt()
+            if (ago in 0 until weeks) buckets[weeks - 1 - ago] += order.total
+        }
+        return buckets.toList()
+    }
 
     /** Cantidad permitida: entre 1 y el mínimo de existencias y el máximo por partida. */
     fun clampQuantity(quantity: Int, stock: Int): Int = quantity.coerceIn(1, maxOf(1, minOf(stock, MAX_QUANTITY)))

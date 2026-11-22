@@ -1,5 +1,11 @@
 package com.monzatti.app.ui.feature.shop
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.foundation.layout.size
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -11,13 +17,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
@@ -25,6 +30,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -83,7 +89,7 @@ class ShopViewModel @Inject constructor(
     val cartCount: StateFlow<Int> = cart.lines.map { lines -> lines.sumOf { it.quantity } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    private val _loading = MutableStateFlow(true)
+    private val _loading = MutableStateFlow(repository.products.value.isEmpty())
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
     private val _adding = MutableStateFlow(false)
@@ -98,7 +104,8 @@ class ShopViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            repository.refresh().onFailure { _message.value = it.message }
+            // El catálogo vive en el repositorio (singleton): solo se descarga la primera vez.
+            if (repository.products.value.isEmpty()) repository.refresh().onFailure { _message.value = it.message }
             cart.refresh()
             _loading.value = false
         }
@@ -148,7 +155,7 @@ fun ShopScreen(
                 MutedText("Talento local. Estilo sin fronteras.")
             }
             TextButton(onClick = onOrders) { Text("Pedidos", color = c.muted, fontSize = 12.sp) }
-            BadgeIconButton("👜", cartCount, onCart)
+            BadgeIconButton(Icons.Outlined.ShoppingBag, "Carrito", cartCount, onCart)
         }
         AppTextField(search, { search = it }, placeholder = "Busca prendas o marcas")
         ChoiceRow(ShopCategories, category) { category = it }
@@ -169,16 +176,15 @@ fun ShopScreen(
             when (state) {
                 0 -> SkeletonGrid(cards = 4, cardHeight = 220.dp)
                 1 -> InfoCard("No encontramos productos con esa búsqueda.")
-                else -> {
-                    val rows = (filtered.size + 1) / 2
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        modifier = Modifier.fillMaxWidth().height((rows * 236).dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        userScrollEnabled = false
-                    ) {
-                        items(filtered, key = { it.id }) { product -> ProductCard(product, onProduct, onTryOn) }
+                // Filas normales (no lazy): la pantalla ya hace scroll y así cada fila crece con la letra.
+                else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    filtered.chunked(2).forEach { row ->
+                        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            row.forEach { product ->
+                                key(product.id) { ProductCard(product, onProduct, onTryOn, Modifier.weight(1f).fillMaxHeight()) }
+                            }
+                            if (row.size == 1) Spacer(Modifier.weight(1f))
+                        }
                     }
                 }
             }
@@ -187,11 +193,11 @@ fun ShopScreen(
 }
 
 @Composable
-private fun ProductCard(product: Product, onProduct: (String) -> Unit, onTryOn: (String) -> Unit) {
+private fun ProductCard(product: Product, onProduct: (String) -> Unit, onTryOn: (String) -> Unit, modifier: Modifier) {
     val c = MonzattiTheme.colors
     Card(
         onClick = { onProduct(product.id) },
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = c.surface)
     ) {
         Column(Modifier.padding(10.dp)) {
@@ -216,7 +222,8 @@ private fun ProductCard(product: Product, onProduct: (String) -> Unit, onTryOn: 
             Text(mxn(product.price), fontSize = 12.sp, color = c.ink)
             if (product.toTryOnItem() != null) {
                 TextButton(onClick = { onTryOn(product.id) }, contentPadding = PaddingValues(0.dp)) {
-                    Text("📷 Probar con cámara", color = c.muted, fontSize = 10.sp)
+                    Icon(Icons.Outlined.PhotoCamera, contentDescription = null, tint = c.muted, modifier = Modifier.size(16.dp))
+                    Text(" Probar con cámara", color = c.muted, fontSize = 12.sp)
                 }
             }
         }
@@ -246,8 +253,8 @@ fun ProductScreen(
 
     ScreenColumn {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { BackLink("← Catálogo", onBack) }
-            BadgeIconButton("👜", cartCount, onCart)
+            Box(Modifier.weight(1f)) { BackLink("Catálogo", onBack) }
+            BadgeIconButton(Icons.Outlined.ShoppingBag, "Carrito", cartCount, onCart)
         }
         if (product == null) {
             InfoCard("Este producto ya no está disponible.")
@@ -279,7 +286,7 @@ fun ProductScreen(
                 enabled = available,
                 loading = adding
             )
-            if (product.toTryOnItem() != null) SecondaryButton("📷  Probar con cámara") { onTryOn(product.id) }
+            if (product.toTryOnItem() != null) SecondaryButton("Probar con cámara", icon = Icons.Outlined.PhotoCamera) { onTryOn(product.id) }
             MutedText("Envío gratis · Pago seguro en modo de prueba · Diseño mexicano")
         }
     }

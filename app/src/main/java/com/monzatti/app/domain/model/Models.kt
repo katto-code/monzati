@@ -101,14 +101,14 @@ data class Product(
     }
 }
 
-data class ChatMessage(val fromUser: Boolean, val text: String)
 
 data class SignUpRequest(
     val fullName: String,
     val email: String,
     val password: String,
     val role: UserRole,
-    val gender: Gender
+    /** null = prefiere no decirlo. */
+    val gender: Gender?
 )
 
 data class NewProduct(
@@ -129,4 +129,24 @@ object PasswordRules {
 
     fun isValid(password: String): Boolean =
         password.length >= 8 && password.any { it.isUpperCase() } && password.any { it.isDigit() }
+}
+
+/** Medidas en cm; null = sin capturar. */
+data class Measurements(
+    val heightCm: Double? = null,
+    val bustCm: Double? = null,
+    val waistCm: Double? = null,
+    val hipCm: Double? = null
+) {
+    /** Talla sugerida por busto. shortcut: tabla genérica de busto, cambiarla por la guía de tallas de cada marca. */
+    val suggestedSize: String?
+        get() = bustCm?.let { bust ->
+            when {
+                bust < 84 -> "XS"
+                bust < 90 -> "S"
+                bust < 96 -> "M"
+                bust < 102 -> "L"
+                else -> "XL"
+            }
+        }
 }

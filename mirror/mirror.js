@@ -5,7 +5,6 @@ import * as THREE from 'three';
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import { CATALOG, Garment3D, Mannequin } from './garments.js';
 
-const MIRROR_CODE = 'MONZATTI-MIRROR-01';
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
 
@@ -250,12 +249,17 @@ async function connectApp() {
   } catch {
     return; // sin config.js: el espejo funciona solo con el teclado
   }
-  if (!config?.supabaseUrl || !config?.supabaseKey) return;
+  if (!config?.supabaseUrl || !config?.supabaseKey || !config?.email || !config?.password) return;
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const client = createClient(config.supabaseUrl, config.supabaseKey);
+    // El canal es privado y por persona: el espejo entra con la misma cuenta que la app.
+    // shortcut: la contraseña vive en config.js de la laptop; si el espejo se comparte, vincular con un código de un solo uso.
+    const { data, error } = await client.auth.signInWithPassword({ email: config.email, password: config.password });
+    if (error) throw error;
+    await client.realtime.setAuth(data.session.access_token);
     client
-      .channel(`mirror:${config.mirrorCode || MIRROR_CODE}`)
+      .channel(`mirror:${data.user.id}`, { config: { private: true } })
       .on('broadcast', { event: 'projection' }, ({ payload }) => {
         if (!payload) return;
         if (payload.projecting === false) { garment.setVisible(false); return; }

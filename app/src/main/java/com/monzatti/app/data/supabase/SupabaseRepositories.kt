@@ -2,6 +2,7 @@ package com.monzatti.app.data.supabase
 
 import com.monzatti.app.data.fake.emojiFor
 import com.monzatti.app.domain.model.Garment
+import com.monzatti.app.domain.model.Measurements
 import com.monzatti.app.domain.model.Gender
 import com.monzatti.app.domain.model.NewProduct
 import com.monzatti.app.domain.model.OutOfStockException
@@ -41,6 +42,7 @@ import kotlin.math.roundToInt
 import io.github.jan.supabase.realtime.broadcast
 import io.github.jan.supabase.realtime.channel
 import com.monzatti.app.data.fake.OrderDateFormat
+import com.monzatti.app.domain.shop.BrandOrder
 import com.monzatti.app.domain.shop.CartLine
 import com.monzatti.app.domain.shop.CartRepository
 import com.monzatti.app.domain.shop.Order
@@ -134,7 +136,7 @@ class SupabaseAuthRepository @Inject constructor(
             data = buildJsonObject {
                 put("full_name", request.fullName.trim())
                 put("role", request.role.key)
-                put("gender", request.gender.key)
+                request.gender?.let { put("gender", it.key) }
             }
         }
         // Si el proyecto pide confirmar el correo no hay sesión todavía: sin id no se puede seguir.
@@ -178,6 +180,20 @@ class SupabaseProfileRepository @Inject constructor(
         client.from("profiles").update(StyleUpdate(style.key)) { filter { eq("id", userId) } }
         auth.updateLocalStyle(style)
     }
+
+    override suspend fun measurements(): Result<Measurements> = attempt {
+        val dto = client.from("profiles")
+            .select(Columns.list("height_cm", "bust_cm", "waist_cm", "hip_cm")) { filter { eq("id", client.userIdOrThrow()) } }
+            .decodeSingleOrNull<MeasurementsDto>() ?: MeasurementsDto()
+        Measurements(dto.heightCm, dto.bustCm, dto.waistCm, dto.hipCm)
+    }
+
+    override suspend fun saveMeasurements(measurements: Measurements): Result<Unit> = attempt {
+        val m = measurements
+        client.from("profiles").update(MeasurementsDto(m.heightCm, m.bustCm, m.waistCm, m.hipCm)) {
+            filter { eq("id", client.userIdOrThrow()) }
+        }
+    }
 }
 
 @Singleton
@@ -191,7 +207,14 @@ class SupabaseClosetRepository @Inject constructor(
 
     override suspend fun refresh(): Result<Unit> = attempt {
         // RLS solo devuelve las prendas de la persona con sesión.
+        val bucket = client.storage.from("garments")
         items.value = client.from("garments").select().decodeList<GarmentDto>().map { dto ->
+            // Tras reinstalar o en otro celular la foto solo está en Storage: se baja una vez y se queda local.
+            val localPath = images.pathIfExists(dto.id) ?: dto.imageUrl?.let { path ->
+                runCatching { images.saveBytes(dto.id, bucket.downloadAuthenticated(path)) }
+                    .onFailure { if (it is CancellationException) throw it; Log.w("Monzatti", "No se pudo bajar la foto de ${dto.id}", it) }
+                    .getOrNull()
+            }
             Garment(
                 id = dto.id,
                 name = dto.name,
@@ -201,7 +224,7 @@ class SupabaseClosetRepository @Inject constructor(
                 detail = listOfNotNull(dto.color, dto.size).joinToString(" · "),
                 favorite = dto.isFavorite,
                 color = dto.color.orEmpty(),
-                imagePath = images.pathIfExists(dto.id)
+                imagePath = localPath
             )
         }
     }
@@ -210,15 +233,38 @@ class SupabaseClosetRepository @Inject constructor(
         val ownerId = client.userIdOrThrow()
         val id = UUID.randomUUID().toString()
         // La foto se queda en el celular y se respalda en Storage (carpeta privada por usuario).
-        val storagePath = imagePath?.let { draft ->
-            val local = images.promote(draft, id)
-            val path = "$ownerId/$id.png"
-            client.storage.from("garments").upload(path, File(local).readBytes()) { upsert = true }
-            path
+        try {
+            val storagePath = imagePath?.let { draft ->
+                val local = images.promote(draft, id)
+                val path = "$ownerId/$id.png"
+                client.storage.from("garments").upload(path, File(local).readBytes()) { upsert = true }
+                path
+            }
+            val insert = GarmentInsert(id, ownerId, name.ifBlank { "Prenda nueva" }, category, size, color, emojiFor(category), storagePath)
+            client.from("garments").insert(insert)
+        } catch (e: Exception) {
+            images.delete(id) // el borrador sigue ahí para reintentar
+            throw e
         }
-        val insert = GarmentInsert(id, ownerId, name.ifBlank { "Prenda nueva" }, category, size, color, emojiFor(category), storagePath)
-        client.from("garments").insert(insert)
         refresh().getOrThrow()
+    }
+
+    override suspend fun update(id: String, name: String, category: String, size: String, color: String): Result<Unit> = attempt {
+        val current = items.value.firstOrNull { it.id == id } ?: return@attempt
+        client.from("garments").update(GarmentUpdate(name.ifBlank { current.name }, category, size, color, emojiFor(category))) {
+            filter { eq("id", id) }
+        }
+        refresh().getOrThrow()
+    }
+
+    override suspend fun delete(id: String): Result<Unit> = attempt {
+        val ownerId = client.userIdOrThrow()
+        client.from("garments").delete { filter { eq("id", id) } }
+        // La prenda ya no existe: si falla el borrado de la foto en Storage solo queda un archivo huérfano.
+        runCatching { client.storage.from("garments").delete("$ownerId/$id.png") }
+            .onFailure { if (it is CancellationException) throw it; Log.w("Monzatti", "No se pudo borrar la foto de $id", it) }
+        images.delete(id)
+        items.update { list -> list.filterNot { it.id == id } }
     }
 
     override suspend fun toggleFavorite(id: String): Result<Unit> = attempt {
@@ -280,6 +326,54 @@ class SupabaseProductRepository @Inject constructor(
             commission = row?.commissionMxn?.roundToInt() ?: 0,
             net = row?.netMxn?.roundToInt() ?: 0
         )
+    }
+
+    // RLS ("productos: dueño escribe") impide tocar productos de otra marca.
+    override suspend fun update(productId: String, price: Int, stockBySize: Map<String, Int>): Result<Unit> = attempt {
+        require(price >= 0) { "El precio no puede ser negativo." }
+        require(stockBySize.values.all { it >= 0 }) { "Las existencias no pueden ser negativas." }
+        client.from("products").update(PriceUpdate(price)) { filter { eq("id", productId) } }
+        client.from("product_variants").upsert(stockBySize.map { (size, stock) -> VariantInsert(productId, size, stock) }) {
+            onConflict = "product_id,size"
+        }
+        refresh().getOrThrow()
+    }
+
+    override suspend fun archive(productId: String): Result<Unit> = attempt {
+        client.postgrest.rpc("archive_product", buildJsonObject { put("p_product_id", productId) })
+        refresh().getOrThrow()
+    }
+
+    override suspend fun renameBrand(name: String): Result<Unit> = attempt {
+        val clean = name.trim()
+        require(clean.isNotEmpty()) { "Escribe el nombre de tu marca." }
+        require(clean.length <= 60) { "El nombre de la marca es muy largo." }
+        val ownerId = client.userIdOrThrow()
+        val updated = client.from("brands").update(BrandNameDto(clean)) {
+            select()
+            filter { eq("owner_id", ownerId) }
+        }.decodeList<BrandDto>()
+        if (updated.isEmpty()) client.from("brands").insert(BrandInsert(ownerId, clean))
+        refresh().getOrThrow()
+    }
+
+    override suspend fun brandOrders(): Result<List<BrandOrder>> = attempt {
+        client.postgrest.rpc("brand_orders").decodeList<BrandOrderRowDto>()
+            .groupBy { it.orderId }
+            .map { (id, rows) ->
+                BrandOrder(
+                    id = id,
+                    createdAt = OffsetDateTime.parse(rows.first().createdAt).atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime(),
+                    status = rows.first().status.replaceFirstChar { it.uppercase() },
+                    lines = rows.map { OrderLine(it.productName, it.brandName, it.size, it.quantity, it.unitPriceMxn.roundToInt()) },
+                    shipped = rows.all { it.shippedAt != null }
+                )
+            }
+    }
+
+    override suspend fun markShipped(orderId: String): Result<Unit> = attempt {
+        client.postgrest.rpc("mark_order_shipped", buildJsonObject { put("p_order_id", orderId) })
+        Unit
     }
 }
 
@@ -418,8 +512,8 @@ class SupabaseMirrorRepository @Inject constructor(
             isProjecting = true
         )
         client.from("mirror_sessions").upsert(row) { onConflict = "user_id,mirror_code" }
-        broadcast(item, projecting = true)
-        state.value = MirrorProjection(item = item, projecting = true)
+        val live = broadcast(item, projecting = true)
+        state.value = MirrorProjection(item = item, projecting = true, live = live)
     }
 
     private var channel: RealtimeChannel? = null
@@ -428,9 +522,10 @@ class SupabaseMirrorRepository @Inject constructor(
      * Avisa al espejo web (mirror/) por Supabase Realtime: llega en menos de un segundo (RF-02).
      * Si Realtime no responde en 5 s no se bloquea la app: la fila de mirror_sessions ya quedó guardada.
      */
-    private suspend fun broadcast(item: TryOnItem?, projecting: Boolean) {
-        withTimeoutOrNull(5_000) { sendBroadcast(item, projecting) }
-            ?: Log.w("Monzatti", "El espejo no recibió el aviso por Realtime a tiempo")
+    private suspend fun broadcast(item: TryOnItem?, projecting: Boolean): Boolean {
+        val sent = withTimeoutOrNull(5_000) { sendBroadcast(item, projecting) } != null
+        if (!sent) Log.w("Monzatti", "El espejo no recibió el aviso por Realtime a tiempo")
+        return sent
     }
 
     private suspend fun sendBroadcast(item: TryOnItem?, projecting: Boolean) {
@@ -467,7 +562,7 @@ class SupabaseMirrorRepository @Inject constructor(
                 eq("mirror_code", MirrorRepository.MIRROR_CODE)
             }
         }
-        broadcast(null, projecting = false)
-        state.update { it.copy(projecting = false) }
+        val live = broadcast(null, projecting = false)
+        state.update { it.copy(projecting = false, live = live) }
     }
 }

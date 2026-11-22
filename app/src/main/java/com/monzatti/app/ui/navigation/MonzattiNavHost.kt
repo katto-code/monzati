@@ -6,6 +6,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AddBox
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Checkroom
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.outlined.Straighten
+import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -14,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -33,6 +43,7 @@ import com.monzatti.app.domain.model.UserRole
 import com.monzatti.app.domain.repository.AuthRepository
 import com.monzatti.app.ui.feature.about.AboutScreen
 import com.monzatti.app.ui.feature.about.ObjectiveScreen
+import com.monzatti.app.ui.feature.about.PrivacyScreen
 import com.monzatti.app.ui.feature.assistant.AssistantScreen
 import com.monzatti.app.ui.feature.auth.CreateAccountScreen
 import com.monzatti.app.ui.feature.auth.LoginScreen
@@ -69,19 +80,19 @@ class SessionViewModel @Inject constructor(private val auth: AuthRepository) : V
     }
 }
 
-private data class Tab(val route: Any, val label: String, val icon: String)
+private data class Tab(val route: Any, val label: String, val icon: ImageVector)
 
 private val userTabs = listOf(
-    Tab(ClosetRoute, "Closet", "▦"),
-    Tab(ShopRoute, "Tienda", "👜"),
-    Tab(AssistantRoute, "Asistente", "✦"),
-    Tab(FittingRoomRoute, "Medidas", "◎")
+    Tab(ClosetRoute, "Closet", Icons.Outlined.Checkroom),
+    Tab(ShopRoute, "Tienda", Icons.Outlined.ShoppingBag),
+    Tab(AssistantRoute, "Asistente", Icons.Outlined.AutoAwesome),
+    Tab(FittingRoomRoute, "Medidas", Icons.Outlined.Straighten)
 )
 
 private val businessTabs = listOf(
-    Tab(SalesRoute, "Ventas", "▤"),
-    Tab(NewProductRoute, "Alta", "＋"),
-    Tab(InventoryRoute, "Inventario", "▣")
+    Tab(SalesRoute, "Ventas", Icons.Outlined.BarChart),
+    Tab(NewProductRoute, "Alta", Icons.Outlined.AddBox),
+    Tab(InventoryRoute, "Inventario", Icons.Outlined.Inventory2)
 )
 
 private fun NavDestination?.isOn(route: Any): Boolean =
@@ -137,8 +148,8 @@ fun MonzattiNavHost(session: SessionViewModel = hiltViewModel()) {
                         NavigationBarItem(
                             selected = destination.isOn(tab.route),
                             onClick = { nav.switchTab(tab.route, tabs.first().route) },
-                            icon = { Text(tab.icon, fontSize = 18.sp) },
-                            label = { Text(tab.label, fontSize = 10.sp) },
+                            icon = { Icon(tab.icon, contentDescription = null) },
+                            label = { Text(tab.label, fontSize = 12.sp) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = c.onAccent,
                                 selectedTextColor = c.ink,
@@ -167,16 +178,19 @@ fun MonzattiNavHost(session: SessionViewModel = hiltViewModel()) {
                     onLoggedIn = goHome,
                     onCreate = { nav.navigate(CreateAccountRoute) },
                     onRecover = { nav.navigate(RecoveryRoute) },
-                    onAbout = { nav.navigate(AboutRoute) }
+                    onAbout = { nav.navigate(AboutRoute) },
+                    onPrivacy = { nav.navigate(PrivacyRoute) }
                 )
             }
             composable<CreateAccountRoute> {
                 CreateAccountScreen(
                     onBack = { nav.popBackStack() },
-                    onCreated = { nav.navigate(StyleChoiceRoute) { popUpTo<LoginRoute>() } }
+                    onCreated = { nav.navigate(StyleChoiceRoute) { popUpTo<LoginRoute>() } },
+                    onPrivacy = { nav.navigate(PrivacyRoute) }
                 )
             }
             composable<RecoveryRoute> { RecoveryScreen(onBack = { nav.popBackStack() }) }
+            composable<PrivacyRoute> { PrivacyScreen(onBack = { nav.popBackStack() }) }
             composable<AboutRoute> { AboutScreen(onBack = { nav.popBackStack() }, onNext = { nav.navigate(ObjectiveRoute) }) }
             composable<ObjectiveRoute> {
                 ObjectiveScreen(onBack = { nav.popBackStack() }, onOpen = { nav.popBackStack(LoginRoute, inclusive = false) })

@@ -10,6 +10,9 @@ import androidx.compose.material3.TextButton
 import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import com.monzatti.app.core.config.DemoMode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,12 +49,13 @@ fun LoginScreen(
     onCreate: () -> Unit,
     onRecover: () -> Unit,
     onAbout: () -> Unit,
+    onPrivacy: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var role by rememberSaveable { mutableStateOf(UserRole.USUARIO) }
-    var email by rememberSaveable { mutableStateOf("hola@ejemplo.com") }
-    var password by rememberSaveable { mutableStateOf("12345678") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(Unit) { viewModel.restore(onLoggedIn) }
 
     ScreenColumn {
@@ -67,7 +71,7 @@ fun LoginScreen(
             }
         }
         FieldLabel("CORREO ELECTRÓNICO")
-        AppTextField(email, { email = it })
+        AppTextField(email, { email = it }, placeholder = "tucorreo@ejemplo.com", email = true)
         FieldLabel("CONTRASEÑA")
         AppTextField(password, { password = it }, password = true)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -75,7 +79,7 @@ fun LoginScreen(
         }
         ErrorText(state.error)
         PrimaryButton(
-            "Entrar a mi universo  →",
+            "Entrar a mi universo",
             onClick = { viewModel.signIn(email, password, role, onLoggedIn) },
             loading = state.loading
         )
@@ -83,14 +87,14 @@ fun LoginScreen(
         TextButton(onClick = onAbout, modifier = Modifier.fillMaxWidth()) {
             Text("Conoce el proyecto Monzatti", color = MonzattiTheme.colors.muted)
         }
-        MutedText("Al continuar, aceptas los Términos y el Aviso de privacidad.")
+        PrivacyLink(onPrivacy)
         if (viewModel.canToggleDemo) {
             val activity = LocalContext.current as? Activity
             TextButton(onClick = { activity?.let { DemoMode.setAndRestart(it, !viewModel.isDemo) } }, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     if (viewModel.isDemo) "Modo demo activo · Volver a conectar con Supabase" else "Usar modo demo (sin conexión)",
                     color = MonzattiTheme.colors.muted,
-                    fontSize = 11.sp
+                    fontSize = 13.sp
                 )
             }
         } else {
@@ -103,18 +107,19 @@ fun LoginScreen(
 fun CreateAccountScreen(
     onBack: () -> Unit,
     onCreated: (UserProfile) -> Unit,
+    onPrivacy: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var role by rememberSaveable { mutableStateOf(UserRole.USUARIO) }
-    var gender by rememberSaveable { mutableStateOf<Gender?>(null) }
-    var name by rememberSaveable { mutableStateOf("Valentina García") }
-    var email by rememberSaveable { mutableStateOf("valentina@ejemplo.com") }
-    var password by rememberSaveable { mutableStateOf("Monzatti1") }
+    var genderChoice by rememberSaveable { mutableStateOf(-1) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
 
     ScreenColumn {
-        BackLink("← Volver", onBack)
+        BackLink("Volver", onBack)
         Title("Un estilo único. Una cuenta tuya.")
         FieldLabel("TIPO DE CUENTA")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -124,10 +129,10 @@ fun CreateAccountScreen(
         AppTextField(name, { name = it })
         FieldLabel("¿CÓMO TE IDENTIFICAS?")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Gender.entries.forEach { ChoiceChip(it.label, selected = gender == it, onClick = { gender = it }) }
+            GenderChoices.forEachIndexed { i, (label, _) -> ChoiceChip(label, selected = genderChoice == i, onClick = { genderChoice = i }) }
         }
         FieldLabel("CORREO")
-        AppTextField(email, { email = it })
+        AppTextField(email, { email = it }, placeholder = "tucorreo@ejemplo.com", email = true)
         FieldLabel("CONTRASEÑA")
         AppTextField(password, { password = it }, password = true)
         MutedText(PasswordRules.DESCRIPTION)
@@ -135,32 +140,48 @@ fun CreateAccountScreen(
         PrimaryButton(
             "Crear mi cuenta",
             onClick = {
-                val g = gender
-                if (g == null) {
-                    localError = "Elige femenino o masculino para personalizar tu experiencia."
+                if (genderChoice < 0) {
+                    localError = "Elige una opción en «¿Cómo te identificas?»."
                 } else {
                     localError = null
-                    viewModel.signUp(SignUpRequest(name, email, password, role, g), onCreated)
+                    viewModel.signUp(SignUpRequest(name, email, password, role, GenderChoices[genderChoice].second), onCreated)
                 }
             },
             loading = state.loading
         )
+        PrivacyLink(onPrivacy, action = "crear tu cuenta")
     }
 }
 
 @Composable
 fun RecoveryScreen(onBack: () -> Unit, viewModel: AuthViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var email by rememberSaveable { mutableStateOf("valentina@ejemplo.com") }
+    var email by rememberSaveable { mutableStateOf("") }
     ScreenColumn {
-        BackLink("← Volver", onBack)
+        BackLink("Volver", onBack)
         Spacer(Modifier.height(24.dp))
         Title("Tu universo te espera.")
         MutedText("Ingresa tu correo y te enviaremos un enlace para crear una nueva contraseña.")
         FieldLabel("CORREO ELECTRÓNICO")
-        AppTextField(email, { email = it })
+        AppTextField(email, { email = it }, placeholder = "tucorreo@ejemplo.com", email = true)
         ErrorText(state.error)
         PrimaryButton("Enviar enlace", onClick = { viewModel.sendReset(email) }, loading = state.loading)
-        if (state.resetSent) InfoCard("✓  Enlace enviado. Es válido por 30 minutos. Revisa tu carpeta de spam.")
+        if (state.resetSent) InfoCard("Enlace enviado. Es válido por 30 minutos. Revisa tu carpeta de spam.", icon = Icons.Filled.CheckCircle)
+    }
+}
+
+/** El género solo adapta nombres y fotos del cuestionario; null = prefiere no decirlo. */
+private val GenderChoices: List<Pair<String, Gender?>> =
+    Gender.entries.map { it.label to it } + ("Prefiero no decirlo" to null)
+
+@Composable
+private fun PrivacyLink(onPrivacy: () -> Unit, action: String = "continuar") {
+    TextButton(onClick = onPrivacy, modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Al $action, aceptas el Aviso de privacidad. Léelo aquí.",
+            color = MonzattiTheme.colors.muted,
+            fontSize = 13.sp,
+            textDecoration = TextDecoration.Underline
+        )
     }
 }

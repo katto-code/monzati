@@ -88,6 +88,50 @@ class BusinessRulesTest {
     }
 
     @Test
+    fun weeklySalesBucketsByWeekEndingToday() {
+        val today = java.time.LocalDate.of(2026, 11, 22)
+        fun order(daysAgo: Long, amount: Int) = com.monzatti.app.domain.shop.BrandOrder(
+            "x", today.minusDays(daysAgo).atTime(12, 0), "Pagado",
+            listOf(com.monzatti.app.domain.shop.OrderLine("Blusa", "Francesa", "M", 1, amount)), shipped = false
+        )
+        val weeks = ShopRules.weeklySales(listOf(order(0, 100), order(6, 50), order(7, 30), order(90, 999)), today)
+        assertEquals(12, weeks.size)
+        assertEquals(150, weeks[11])
+        assertEquals(30, weeks[10])
+        assertEquals(180, weeks.sum()) // la de hace 90 días queda fuera
+    }
+
+    @Test
+    fun partnerEditsSellsAndShips() = runTest {
+        val auth = FakeAuthRepository()
+        auth.signIn("mariana@ejemplo.com", "x", UserRole.SOCIO).getOrThrow()
+        val catalog = FakeProductRepository(auth)
+        // No puede tocar productos de otra marca.
+        assertTrue(catalog.update("p2", 1, mapOf("M" to 1)).isFailure)
+        catalog.update("p1", 2500, mapOf("M" to 9)).getOrThrow()
+        assertEquals(2500, catalog.products.value.first { it.id == "p1" }.price)
+        assertEquals(9, catalog.stockOf("p1", "M"))
+        assertTrue(catalog.renameBrand("Nómada").isFailure)
+        catalog.renameBrand("Maison M").getOrThrow()
+
+        val cart = FakeCartRepository(catalog).apply { simulatedDelayMs = 0 }
+        cart.add("p1", "M", 2)
+        cart.add("p2", "M", 1)
+        cart.startCheckout().getOrThrow()
+        cart.confirmOrder("test", "Calle 1").getOrThrow()
+        val orders = catalog.brandOrders().getOrThrow()
+        assertEquals(1, orders.size)
+        assertEquals(5000, orders.single().total) // solo la blusa de su marca, no el vestido de Nómada
+        assertEquals(5000, catalog.salesSummary().getOrThrow().gross)
+        catalog.markShipped(orders.single().id).getOrThrow()
+        assertTrue(catalog.brandOrders().getOrThrow().single().shipped)
+        assertTrue(catalog.markShipped(orders.single().id).isFailure)
+
+        catalog.archive("p1").getOrThrow()
+        assertFalse(catalog.products.value.any { it.id == "p1" })
+    }
+
+    @Test
     fun shopRules() {
         assertEquals(550, ShopRules.commission(4580))
         assertEquals(3, ShopRules.clampQuantity(5, 3))

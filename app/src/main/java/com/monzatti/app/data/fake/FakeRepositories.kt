@@ -2,6 +2,7 @@ package com.monzatti.app.data.fake
 
 import com.monzatti.app.data.local.GarmentImages
 import com.monzatti.app.domain.model.Garment
+import com.monzatti.app.domain.model.Measurements
 import com.monzatti.app.domain.model.NewProduct
 import com.monzatti.app.domain.model.OutOfStockException
 import com.monzatti.app.domain.model.PasswordRules
@@ -14,6 +15,7 @@ import com.monzatti.app.domain.repository.AuthRepository
 import com.monzatti.app.domain.repository.ClosetRepository
 import com.monzatti.app.domain.repository.MirrorProjection
 import com.monzatti.app.domain.repository.MirrorRepository
+import com.monzatti.app.domain.shop.BrandOrder
 import com.monzatti.app.domain.shop.CartLine
 import com.monzatti.app.domain.shop.CartRepository
 import com.monzatti.app.domain.shop.Order
@@ -103,6 +105,15 @@ class FakeProfileRepository @Inject constructor(private val auth: FakeAuthReposi
         auth.updateStyle(style)
         return Result.success(Unit)
     }
+
+    private var saved = Measurements(heightCm = 168.0)
+
+    override suspend fun measurements(): Result<Measurements> = Result.success(saved)
+
+    override suspend fun saveMeasurements(measurements: Measurements): Result<Unit> {
+        saved = measurements
+        return Result.success(Unit)
+    }
 }
 
 @Singleton
@@ -141,6 +152,22 @@ class FakeClosetRepository @Inject constructor(private val images: GarmentImages
         items.update { list -> list.map { if (it.id == id) it.copy(favorite = !it.favorite) else it } }
         return Result.success(Unit)
     }
+
+    override suspend fun update(id: String, name: String, category: String, size: String, color: String): Result<Unit> {
+        items.update { list ->
+            list.map {
+                if (it.id != id) it
+                else it.copy(name = name.ifBlank { it.name }, category = category, size = size, color = color, detail = "$color · $size", emoji = emojiFor(category))
+            }
+        }
+        return Result.success(Unit)
+    }
+
+    override suspend fun delete(id: String): Result<Unit> {
+        images.delete(id)
+        items.update { list -> list.filterNot { it.id == id } }
+        return Result.success(Unit)
+    }
 }
 
 @Singleton
@@ -162,7 +189,15 @@ class FakeProductRepository @Inject constructor(private val auth: FakeAuthReposi
     override val products: StateFlow<List<Product>> = items.asStateFlow()
 
     /** Pedidos pagados en esta sesión de demo, para el panel de ventas. */
-    private val sales = MutableStateFlow<List<Order>>(emptyList())
+    private val sales = MutableStateFlow<List<Pair<Order, LocalDateTime>>>(emptyList())
+
+    /** Pedidos que el socio ya marcó como enviados. */
+    private val shipped = MutableStateFlow<Set<String>>(emptySet())
+
+    private fun myBrand(): String? {
+        val owner = auth.currentUser.value ?: return null
+        return items.value.firstOrNull { it.ownerId == owner.id }?.brand
+    }
 
     override suspend fun refresh(): Result<Unit> = Result.success(Unit)
 
@@ -189,19 +224,72 @@ class FakeProductRepository @Inject constructor(private val auth: FakeAuthReposi
     }
 
     override suspend fun salesSummary(): Result<SalesSummary> {
-        // Cifras base de la demo + lo que se compre durante la presentación.
-        val orders = sales.value
-        val gross = 48_250 + orders.sumOf { it.subtotal }
+        // Solo lo que se compró en esta sesión de demo de la marca del socio.
+        val orders = brandOrders().getOrThrow()
+        val gross = orders.sumOf { it.total }
         val commission = ShopRules.commission(gross)
         return Result.success(
             SalesSummary(
-                orders = 32 + orders.size,
-                units = 41 + orders.sumOf { it.units },
+                orders = orders.size,
+                units = orders.sumOf { o -> o.lines.sumOf { it.quantity } },
                 gross = gross,
                 commission = commission,
                 net = gross - commission
             )
         )
+    }
+
+    override suspend fun update(productId: String, price: Int, stockBySize: Map<String, Int>): Result<Unit> {
+        if (price < 0) return Result.failure(IllegalArgumentException("El precio no puede ser negativo."))
+        if (stockBySize.values.any { it < 0 }) return Result.failure(IllegalArgumentException("Las existencias no pueden ser negativas."))
+        val owner = auth.currentUser.value?.id
+        if (items.value.none { it.id == productId && it.ownerId == owner }) return Result.failure(IllegalStateException("Este producto no es de tu marca."))
+        items.update { list -> list.map { if (it.id == productId) it.copy(price = price, stockBySize = it.stockBySize + stockBySize) else it } }
+        return Result.success(Unit)
+    }
+
+    override suspend fun archive(productId: String): Result<Unit> {
+        val owner = auth.currentUser.value?.id
+        if (items.value.none { it.id == productId && it.ownerId == owner }) return Result.failure(IllegalStateException("Este producto no es de tu marca."))
+        // El carrito demo ve existencias 0 al refrescar, así que ya no se puede pagar.
+        items.update { list -> list.filterNot { it.id == productId } }
+        return Result.success(Unit)
+    }
+
+    override suspend fun renameBrand(name: String): Result<Unit> {
+        val clean = name.trim()
+        if (clean.isEmpty()) return Result.failure(IllegalArgumentException("Escribe el nombre de tu marca."))
+        if (clean.length > 60) return Result.failure(IllegalArgumentException("El nombre de la marca es muy largo."))
+        val owner = auth.currentUser.value?.id ?: return Result.failure(IllegalStateException("Inicia sesión."))
+        val old = myBrand()
+        // En el demo las ventas se ligan a la marca por nombre: dos marcas con el mismo nombre se mezclarían.
+        if (items.value.any { it.ownerId != owner && it.brand.equals(clean, ignoreCase = true) }) {
+            return Result.failure(IllegalArgumentException("Ya existe una marca con ese nombre."))
+        }
+        items.update { list -> list.map { if (it.ownerId == owner) it.copy(brand = clean) else it } }
+        if (old != null) sales.update { list ->
+            list.map { (o, at) -> o.copy(lines = o.lines.map { if (it.brand == old) it.copy(brand = clean) else it }) to at }
+        }
+        return Result.success(Unit)
+    }
+
+    override suspend fun brandOrders(): Result<List<BrandOrder>> {
+        val brand = myBrand() ?: return Result.success(emptyList())
+        return Result.success(
+            sales.value.mapNotNull { (order, at) ->
+                val lines = order.lines.filter { it.brand == brand }
+                if (lines.isEmpty()) null
+                else BrandOrder(order.id, at, if (order.id in shipped.value) "Enviado" else order.status, lines, order.id in shipped.value)
+            }.sortedByDescending { it.createdAt }
+        )
+    }
+
+    override suspend fun markShipped(orderId: String): Result<Unit> {
+        if (brandOrders().getOrThrow().none { it.id == orderId && !it.shipped }) {
+            return Result.failure(IllegalStateException("Este pedido no tiene prendas de tu marca por enviar."))
+        }
+        shipped.update { it + orderId }
+        return Result.success(Unit)
     }
 
     fun stockOf(productId: String, size: String): Int =
@@ -217,7 +305,7 @@ class FakeProductRepository @Inject constructor(private val auth: FakeAuthReposi
     }
 
     fun recordSale(order: Order) {
-        sales.update { it + order }
+        sales.update { it + (order to LocalDateTime.now()) }
     }
 }
 

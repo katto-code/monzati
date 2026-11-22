@@ -15,7 +15,11 @@ import javax.inject.Singleton
 @Singleton
 class GarmentImages @Inject constructor(@ApplicationContext context: Context) {
 
-    private val dir = File(context.filesDir, "garments").apply { mkdirs() }
+    // Al arrancar ningún borrador está en uso: se borran los que quedaron de sesiones anteriores.
+    private val dir = File(context.filesDir, "garments").apply {
+        mkdirs()
+        listFiles { f -> f.name.startsWith(DRAFT_PREFIX) }?.forEach { it.delete() }
+    }
 
     fun fileFor(id: String): File = File(dir, "$id.png")
 
@@ -30,17 +34,29 @@ class GarmentImages @Inject constructor(@ApplicationContext context: Context) {
     }
 
     /** Guarda en un archivo temporal mientras la persona revisa la prenda antes de guardarla. */
-    fun saveDraft(bitmap: Bitmap): String = save("draft-${System.currentTimeMillis()}", bitmap)
+    fun saveDraft(bitmap: Bitmap): String = save("$DRAFT_PREFIX${System.currentTimeMillis()}", bitmap)
 
-    /** Mueve un borrador al nombre definitivo de la prenda. */
+    /** Copia un borrador al nombre definitivo de la prenda; el borrador se queda para reintentar si falla el guardado. */
     fun promote(draftPath: String, id: String): String {
         val target = fileFor(id)
         File(draftPath).copyTo(target, overwrite = true)
-        File(draftPath).delete()
         return target.absolutePath
     }
 
+    /** Guarda una foto descargada de Storage. */
+    fun saveBytes(id: String, bytes: ByteArray): String = fileFor(id).apply { writeBytes(bytes) }.absolutePath
+
+    fun discardDraft(path: String?) {
+        path?.let(::File)?.takeIf { it.name.startsWith(DRAFT_PREFIX) }?.delete()
+    }
+
+    fun delete(id: String) {
+        fileFor(id).delete()
+    }
+
     companion object {
+        private const val DRAFT_PREFIX = "draft-"
+
         fun cropTransparent(bitmap: Bitmap): Bitmap {
             if (!bitmap.hasAlpha()) return bitmap
             val w = bitmap.width

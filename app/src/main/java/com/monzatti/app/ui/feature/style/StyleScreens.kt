@@ -1,5 +1,12 @@
 package com.monzatti.app.ui.feature.style
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Quiz
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.ui.graphics.vector.ImageVector
+
 import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -68,8 +75,8 @@ fun StyleChoiceScreen(
         Spacer(Modifier.height(12.dp))
         Title("Tu app, a tu estilo.")
         MutedText("Monzatti se viste de tus colores. Elige cómo quieres descubrirlos.")
-        ChoiceCard("✦", "Elige el estilo de tu app", "Mira las cuatro paletas y quédate con la tuya.", onPick)
-        ChoiceCard("?", "Descubre tu estilo", "Responde 5 preguntas con imágenes y te decimos cuál eres.", onQuiz)
+        ChoiceCard(Icons.Outlined.Palette, "Elige el estilo de tu app", "Mira las cuatro paletas y quédate con la tuya.", onPick)
+        ChoiceCard(Icons.Outlined.Quiz, "Descubre tu estilo", "Responde 5 preguntas con imágenes y te decimos cuál eres.", onQuiz)
         Spacer(Modifier.height(4.dp))
         SecondaryButton("Omitir por ahora (queda Monzatti)") {
             viewModel.apply(StylePalette.MONZATTI) { onSkipped(user?.role ?: UserRole.USUARIO) }
@@ -78,20 +85,20 @@ fun StyleChoiceScreen(
 }
 
 @Composable
-private fun ChoiceCard(icon: String, title: String, subtitle: String, onClick: () -> Unit) {
+private fun ChoiceCard(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
     val c = MonzattiTheme.colors
     SurfaceCard(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.width(44.dp).height(44.dp).background(c.accent, RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
-            ) { Text(icon, color = c.onAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+            ) { Icon(icon, contentDescription = null, tint = c.onAccent) }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, color = c.ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 MutedText(subtitle)
             }
-            Text("→", color = c.muted, fontSize = 18.sp)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = c.muted)
         }
     }
 }
@@ -101,7 +108,7 @@ private fun ChoiceCard(icon: String, title: String, subtitle: String, onClick: (
 fun StylePickerScreen(onBack: () -> Unit, onSelect: (StylePalette) -> Unit, viewModel: StyleViewModel = hiltViewModel()) {
     val user by viewModel.user.collectAsStateWithLifecycle()
     ScreenColumn {
-        BackLink("← Volver", onBack)
+        BackLink("Volver", onBack)
         Title("Elige tu estilo")
         MutedText("Toca una paleta para verla en tu app.")
         StylePalette.selectable.forEach { palette ->
@@ -159,7 +166,7 @@ fun StyleQuizScreen(onExit: () -> Unit, onFinished: (StylePalette) -> Unit, view
     BackHandler(onBack = goBack)
 
     ScreenColumn {
-        BackLink("← Volver", goBack)
+        BackLink("Volver", goBack)
         val gender = state.gender
         val question = state.current
         when {

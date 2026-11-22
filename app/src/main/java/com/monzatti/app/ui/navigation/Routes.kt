@@ -8,6 +8,7 @@ import kotlinx.serialization.Serializable
 @Serializable object RecoveryRoute
 @Serializable object AboutRoute
 @Serializable object ObjectiveRoute
+@Serializable object PrivacyRoute
 
 // Estilo de la app
 @Serializable object StyleChoiceRoute

@@ -78,6 +78,23 @@ data class ProductInsert(
 data class IdDto(val id: String)
 
 @Serializable
+data class PriceUpdate(@SerialName("price_mxn") val priceMxn: Int)
+
+/** Una fila de brand_orders(): una partida de la marca del socio. */
+@Serializable
+data class BrandOrderRowDto(
+    @SerialName("order_id") val orderId: String,
+    @SerialName("created_at") val createdAt: String,
+    val status: String,
+    @SerialName("product_name") val productName: String,
+    @SerialName("brand_name") val brandName: String,
+    val size: String,
+    val quantity: Int,
+    @SerialName("unit_price_mxn") val unitPriceMxn: Double,
+    @SerialName("shipped_at") val shippedAt: String? = null
+)
+
+@Serializable
 data class VariantInsert(
     @SerialName("product_id") val productId: String,
     val size: String,
@@ -160,4 +177,16 @@ data class OrderDto(
     @SerialName("commission_mxn") val commissionMxn: Double = 0.0,
     @SerialName("total_mxn") val totalMxn: Double = 0.0,
     @SerialName("order_items") val items: List<OrderItemDto> = emptyList()
+)
+
+@Serializable
+data class GarmentUpdate(val name: String, val category: String, val size: String, val color: String, val emoji: String)
+
+/** Columnas de medidas de profiles; también se usa para actualizarlas (null borra la medida). */
+@Serializable
+data class MeasurementsDto(
+    @SerialName("height_cm") val heightCm: Double? = null,
+    @SerialName("bust_cm") val bustCm: Double? = null,
+    @SerialName("waist_cm") val waistCm: Double? = null,
+    @SerialName("hip_cm") val hipCm: Double? = null
 )

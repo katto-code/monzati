@@ -71,6 +71,21 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.VisualTransformation
 import com.monzatti.app.core.theme.MonzattiTheme
 
 @Composable
@@ -97,25 +112,38 @@ fun Title(text: String) {
 
 @Composable
 fun FieldLabel(text: String) {
-    Text(text, color = MonzattiTheme.colors.muted, fontSize = 10.sp, letterSpacing = 1.1.sp, fontWeight = FontWeight.Medium)
+    Text(text, color = MonzattiTheme.colors.muted, fontSize = 12.sp, letterSpacing = 1.1.sp, fontWeight = FontWeight.Medium)
 }
 
 @Composable
 fun MutedText(text: String) {
-    Text(text, color = MonzattiTheme.colors.muted, fontSize = 12.sp, lineHeight = 18.sp)
+    Text(text, color = MonzattiTheme.colors.muted, fontSize = 13.sp, lineHeight = 19.sp)
 }
 
 @Composable
 fun ErrorText(text: String?) {
     if (!text.isNullOrBlank()) {
-        Text(text, color = Color(0xFFD64545), fontSize = 12.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
+        Text(text, color = MonzattiTheme.colors.error, fontSize = 13.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium)
     }
 }
 
+/** Enlace para regresar; la flecha la pone el componente, el texto va sin «←». */
 @Composable
 fun BackLink(text: String, onClick: () -> Unit) {
+    val c = MonzattiTheme.colors
     TextButton(onClick = onClick, contentPadding = PaddingValues(0.dp)) {
-        Text(text, color = MonzattiTheme.colors.muted)
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = c.muted, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(text, color = c.muted)
+    }
+}
+
+/** Ícono a la izquierda del texto de un botón. */
+@Composable
+private fun ButtonIcon(icon: ImageVector?) {
+    if (icon != null) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
     }
 }
 
@@ -126,6 +154,7 @@ fun PrimaryButton(
     accent: Boolean = false,
     enabled: Boolean = true,
     loading: Boolean = false,
+    icon: ImageVector? = null,
     modifier: Modifier = Modifier.fillMaxWidth()
 ) {
     val c = MonzattiTheme.colors
@@ -146,7 +175,10 @@ fun PrimaryButton(
             if (busy) {
                 CircularProgressIndicator(Modifier.size(20.dp), color = content, strokeWidth = 2.dp)
             } else {
-                Text(text, fontWeight = if (accent) FontWeight.SemiBold else FontWeight.Medium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ButtonIcon(icon)
+                    Text(text, fontWeight = if (accent) FontWeight.SemiBold else FontWeight.Medium)
+                }
             }
         }
     }
@@ -221,32 +253,32 @@ fun QuantityStepper(quantity: Int, onChange: (Int) -> Unit, max: Int) {
         Modifier.border(1.dp, c.line, CircleShape).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextButton(onClick = { onChange(quantity - 1) }, enabled = quantity > 1, contentPadding = PaddingValues(0.dp)) {
-            Text("−", fontSize = 18.sp, color = if (quantity > 1) c.ink else c.line)
+        IconButton(onClick = { onChange(quantity - 1) }, enabled = quantity > 1) {
+            Icon(Icons.Filled.Remove, contentDescription = "Quitar uno", tint = if (quantity > 1) c.ink else c.line)
         }
         AnimatedContent(targetState = quantity, label = "qty") {
             Text("$it", color = c.ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp))
         }
-        TextButton(onClick = { onChange(quantity + 1) }, enabled = quantity < max, contentPadding = PaddingValues(0.dp)) {
-            Text("+", fontSize = 18.sp, color = if (quantity < max) c.ink else c.line)
+        IconButton(onClick = { onChange(quantity + 1) }, enabled = quantity < max) {
+            Icon(Icons.Filled.Add, contentDescription = "Agregar uno", tint = if (quantity < max) c.ink else c.line)
         }
     }
 }
 
 /** Botón redondo con contador (carrito). */
 @Composable
-fun BadgeIconButton(icon: String, count: Int, onClick: () -> Unit) {
+fun BadgeIconButton(icon: ImageVector, contentDescription: String, count: Int, onClick: () -> Unit) {
     val c = MonzattiTheme.colors
-    Box(Modifier.size(44.dp).clip(CircleShape).background(c.surface).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Text(icon, fontSize = 18.sp)
+    Box(Modifier.size(48.dp).clip(CircleShape).background(c.surface).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Icon(icon, contentDescription = "$contentDescription, $count", tint = c.ink, modifier = Modifier.size(22.dp))
         AnimatedVisibility(
             visible = count > 0,
             enter = scaleIn() + fadeIn(),
             exit = scaleOut() + fadeOut(),
             modifier = Modifier.align(Alignment.TopEnd)
         ) {
-            Box(Modifier.size(18.dp).background(c.accent, CircleShape), contentAlignment = Alignment.Center) {
-                Text("$count", color = c.onAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Box(Modifier.size(20.dp).background(c.accent, CircleShape), contentAlignment = Alignment.Center) {
+                Text("$count", color = c.onAccent, fontSize = 12.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -276,9 +308,16 @@ fun Toast(message: String?, actionLabel: String? = null, onAction: () -> Unit = 
 }
 
 @Composable
-fun SecondaryButton(text: String, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(11.dp)) {
-        Text(text, color = MonzattiTheme.colors.ink)
+fun SecondaryButton(text: String, icon: ImageVector? = null, onClick: () -> Unit) {
+    val c = MonzattiTheme.colors
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(11.dp),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = c.ink)
+    ) {
+        ButtonIcon(icon)
+        Text(text, color = c.ink)
     }
 }
 
@@ -289,30 +328,50 @@ fun AppTextField(
     placeholder: String? = null,
     password: Boolean = false,
     number: Boolean = false,
+    email: Boolean = false,
     modifier: Modifier = Modifier.fillMaxWidth()
 ) {
+    var visible by rememberSaveable { mutableStateOf(false) }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier,
         singleLine = true,
-        placeholder = placeholder?.let { { Text(it, fontSize = 12.sp) } },
-        visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        placeholder = placeholder?.let { { Text(it, fontSize = 13.sp) } },
+        visualTransformation = if (password && !visible) PasswordVisualTransformation() else VisualTransformation.None,
+        trailingIcon = if (password) {
+            {
+                IconButton(onClick = { visible = !visible }) {
+                    Icon(
+                        if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = if (visible) "Ocultar contraseña" else "Mostrar contraseña"
+                    )
+                }
+            }
+        } else null,
         keyboardOptions = KeyboardOptions(
             keyboardType = when {
                 password -> KeyboardType.Password
                 number -> KeyboardType.Number
+                email -> KeyboardType.Email
                 else -> KeyboardType.Text
-            }
+            },
+            autoCorrectEnabled = !(password || email)
         )
     )
 }
 
 @Composable
-fun InfoCard(text: String) {
+fun InfoCard(text: String, icon: ImageVector? = null) {
     val c = MonzattiTheme.colors
     Card(colors = CardDefaults.cardColors(containerColor = c.surface), shape = RoundedCornerShape(12.dp)) {
-        Text(text, modifier = Modifier.fillMaxWidth().padding(14.dp), fontSize = 12.sp, lineHeight = 19.sp, color = c.ink)
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = c.ink, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(text, fontSize = 13.sp, lineHeight = 20.sp, color = c.ink)
+        }
     }
 }
 
@@ -335,10 +394,11 @@ fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Marco para la imagen de una prenda o producto (aún emojis en el prototipo). */
+/** Marco para la imagen de una prenda o producto (el emoji es solo el marcador cuando no hay foto). */
 @Composable
 fun ItemImage(emoji: String, height: Dp, emojiSize: Int = 38, imagePath: String? = null) {
-    val bitmap = rememberImageFile(imagePath)
+    // Las tarjetas miden ≤ 200dp: 512 px basta y evita cargar fotos de 12 MP por cada celda.
+    val bitmap = rememberImageFile(imagePath, maxPx = 512)
     Box(
         modifier = Modifier.fillMaxWidth().height(height).background(MonzattiTheme.colors.surfaceVariant, RoundedCornerShape(10.dp)),
         contentAlignment = Alignment.Center
@@ -351,15 +411,29 @@ fun ItemImage(emoji: String, height: Dp, emojiSize: Int = 38, imagePath: String?
     }
 }
 
-/** Carga (una vez) una imagen local en segundo plano. */
+/** Carga (una vez) una imagen local en segundo plano, reducida para que su lado mayor no pase mucho de [maxPx]. */
 @Composable
-fun rememberImageFile(path: String?): ImageBitmap? {
-    val state = produceState<ImageBitmap?>(initialValue = null, path) {
+fun rememberImageFile(path: String?, maxPx: Int = 1024): ImageBitmap? {
+    val state = produceState<ImageBitmap?>(initialValue = null, path, maxPx) {
         value = path?.let {
-            withContext(Dispatchers.IO) { BitmapFactory.decodeFile(it)?.asImageBitmap() }
+            withContext(Dispatchers.IO) { decodeSampled(it, maxPx)?.asImageBitmap() }
         }
     }
     return state.value
+}
+
+internal fun sampleSizeFor(width: Int, height: Int, maxPx: Int): Int {
+    var sample = 1
+    while (maxOf(width, height) / (sample * 2) >= maxPx) sample *= 2
+    return sample
+}
+
+private fun decodeSampled(path: String, maxPx: Int): android.graphics.Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    if (bounds.outWidth <= 0) return null
+    val options = BitmapFactory.Options().apply { inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxPx) }
+    return BitmapFactory.decodeFile(path, options)
 }
 
 @Composable
@@ -388,7 +462,7 @@ fun ChoiceChip(text: String, selected: Boolean, onClick: () -> Unit) {
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(text, fontSize = 11.sp) },
+        label = { Text(text, fontSize = 13.sp) },
         shape = CircleShape,
         colors = FilterChipDefaults.filterChipColors(
             containerColor = c.surface,

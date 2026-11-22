@@ -1,5 +1,8 @@
 package com.monzatti.app.ui.feature.update
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -215,7 +218,7 @@ fun VersionCard(viewModel: UpdateViewModel = hiltViewModel()) {
         Text("Monzatti ${viewModel.versionLabel}", color = c.ink, fontWeight = FontWeight.Medium)
         if (viewModel.channel != "estable") MutedText("Canal de ${viewModel.channel}")
         when (val s = state) {
-            UpdateState.UpToDate -> Text("✓ Ya tienes la versión más reciente.", color = c.positive, fontSize = 12.sp)
+            UpdateState.UpToDate -> Text("Ya tienes la versión más reciente.", color = c.positive, fontSize = 12.sp)
             is UpdateState.Failed -> if (s.update == null) ErrorText(s.message)
             else -> Unit
         }

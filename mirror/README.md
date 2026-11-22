@@ -21,7 +21,8 @@ Conecta la laptop a la TV o al proyector por HDMI.
 
 ## Vincularlo con la app
 
-1. Copia `config.example.js` como `config.js` y pon la URL y la clave publicable de Supabase.
+1. Copia `config.example.js` como `config.js` y pon la URL y la clave publicable de Supabase, más el correo y la
+   contraseña de la misma cuenta que usa la app: cada persona tiene su propio canal privado (`mirror:<id>`).
 2. En la app, con Supabase configurado, toca **«Al espejo»** en el probador: el espejo recibe la prenda por
    Supabase Realtime en menos de un segundo (RF-02). Abajo a la derecha dirá «● Vinculado a la app».
 

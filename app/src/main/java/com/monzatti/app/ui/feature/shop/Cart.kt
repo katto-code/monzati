@@ -1,5 +1,12 @@
 package com.monzatti.app.ui.feature.shop
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.filled.Check
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -32,6 +39,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +48,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.monzatti.app.core.theme.MonzattiTheme
+import com.monzatti.app.domain.repository.ProductRepository
 import com.monzatti.app.domain.shop.CartLine
 import com.monzatti.app.domain.shop.CartRepository
 import com.monzatti.app.domain.shop.Order
@@ -62,6 +71,8 @@ import com.monzatti.app.ui.components.SurfaceCard
 import com.monzatti.app.ui.components.Title
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -79,7 +90,10 @@ sealed interface CheckoutPhase {
 }
 
 @HiltViewModel
-class CartViewModel @Inject constructor(private val cart: CartRepository) : ViewModel() {
+class CartViewModel @Inject constructor(
+    private val cart: CartRepository,
+    private val products: ProductRepository
+) : ViewModel() {
 
     val lines: StateFlow<List<CartLine>> = cart.lines
     val orders: StateFlow<List<Order>> = cart.orders
@@ -109,7 +123,15 @@ class CartViewModel @Inject constructor(private val cart: CartRepository) : View
         cart.remove(line.id).onFailure { _error.value = it.message }
     }
 
+    private var checkoutStarted = false
+
+    /** Aparta una sola vez por pantalla de pago; no se repite al rotar ni al recomponer. */
+    fun beginCheckout() {
+        if (!checkoutStarted) startCheckout()
+    }
+
     fun startCheckout() {
+        checkoutStarted = true
         _phase.value = CheckoutPhase.Reserving
         viewModelScope.launch {
             _phase.value = cart.startCheckout().fold(
@@ -119,10 +141,19 @@ class CartViewModel @Inject constructor(private val cart: CartRepository) : View
         }
     }
 
-    fun pay(address: String) {
+    /** RN-02: al vencer la reserva no se renueva sola; la persona decide si vuelve a intentar. */
+    fun expire() {
+        if (_phase.value is CheckoutPhase.Reserved) _phase.value = CheckoutPhase.Failed("Tu reserva expiró. Vuelve a intentar el pago.")
+    }
+
+    fun pay(address: String, cardName: String) {
         val reserved = _phase.value as? CheckoutPhase.Reserved ?: return
         if (address.isBlank()) {
             _error.value = "Escribe tu dirección de envío."
+            return
+        }
+        if (cardName.isBlank()) {
+            _error.value = "Escribe el nombre que aparece en la tarjeta."
             return
         }
         _error.value = null
@@ -130,7 +161,10 @@ class CartViewModel @Inject constructor(private val cart: CartRepository) : View
         viewModelScope.launch {
             val ref = "TEST-" + System.currentTimeMillis().toString(36).uppercase()
             cart.confirmOrder(ref, address.trim()).fold(
-                { _phase.value = CheckoutPhase.Done(it) },
+                {
+                    _phase.value = CheckoutPhase.Done(it)
+                    products.refresh() // el pago descontó existencias en el servidor
+                },
                 {
                     _error.value = it.message
                     _phase.value = if (System.currentTimeMillis() > reserved.expiresAt) {
@@ -144,6 +178,14 @@ class CartViewModel @Inject constructor(private val cart: CartRepository) : View
     }
 
     fun clearError() = _error.update { null }
+
+    override fun onCleared() {
+        val p = _phase.value
+        // viewModelScope ya está cancelado aquí; la liberación debe sobrevivir a la pantalla.
+        if (checkoutStarted && p !is CheckoutPhase.Done && p !is CheckoutPhase.Paying) {
+            CoroutineScope(Dispatchers.IO).launch { cart.cancelCheckout() }
+        }
+    }
 }
 
 @Composable
@@ -159,13 +201,13 @@ fun CartScreen(
     val c = MonzattiTheme.colors
 
     ScreenColumn {
-        BackLink("← Seguir comprando", onBack)
+        BackLink("Seguir comprando", onBack)
         Title("Tu carrito")
         when {
             loading -> repeat(2) { Skeleton(Modifier.fillMaxWidth().height(96.dp), corner = 14.dp) }
             lines.isEmpty() -> {
                 Spacer(Modifier.height(24.dp))
-                Text("👜", fontSize = 56.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+                Icon(Icons.Outlined.ShoppingBag, contentDescription = null, tint = c.muted, modifier = Modifier.size(56.dp).align(Alignment.CenterHorizontally))
                 Text(
                     "Tu carrito está vacío",
                     color = c.ink,
@@ -182,7 +224,7 @@ fun CartScreen(
                 }
                 ErrorText(error)
                 Summary(lines)
-                PrimaryButton("Proceder al pago  →", onClick = onCheckout, accent = true)
+                PrimaryButton("Proceder al pago", onClick = onCheckout, accent = true)
                 MutedText("Al pagar apartamos tus prendas por ${ShopRules.RESERVATION_MINUTES} minutos.")
             }
         }
@@ -241,25 +283,25 @@ fun CheckoutScreen(
     val lines by viewModel.lines.collectAsStateWithLifecycle()
     val phase by viewModel.phase.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
-    var address by rememberSaveable { mutableStateOf("Av. Universidad 1, Tecámac, Edo. de México") }
-    var cardName by rememberSaveable { mutableStateOf("Valentina García") }
+    var address by rememberSaveable { mutableStateOf("") }
+    var cardName by rememberSaveable { mutableStateOf("") }
     val c = MonzattiTheme.colors
 
-    LaunchedEffect(Unit) { viewModel.startCheckout() }
+    LaunchedEffect(Unit) { viewModel.beginCheckout() }
     LaunchedEffect(phase) { (phase as? CheckoutPhase.Done)?.let { onDone(it.order.id) } }
 
     Box(Modifier.fillMaxSize()) {
         ScreenColumn {
-            BackLink("← Carrito", onBack)
+            BackLink("Carrito", onBack)
             Title("Pago")
             when (val p = phase) {
                 is CheckoutPhase.Failed -> {
-                    InfoCard("⚠  ${p.message}")
+                    InfoCard(p.message, icon = Icons.Outlined.WarningAmber)
                     PrimaryButton("Volver a intentar", onClick = viewModel::startCheckout, accent = true)
                     SecondaryButton("Revisar carrito", onClick = onBack)
                 }
                 else -> {
-                    if (p is CheckoutPhase.Reserved) ReservationTimer(p.expiresAt, onExpired = viewModel::startCheckout)
+                    if (p is CheckoutPhase.Reserved) ReservationTimer(p.expiresAt, onExpired = viewModel::expire)
                     FieldLabel("ENVÍO")
                     AppTextField(address, { address = it }, placeholder = "Calle, número, ciudad")
                     MutedText("Entrega estimada: 3 a 5 días hábiles · Envío gratis")
@@ -267,11 +309,12 @@ fun CheckoutScreen(
                     FieldLabel("PAGO")
                     SurfaceCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("💳  Tarjeta", color = c.ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Icon(Icons.Outlined.CreditCard, contentDescription = null, tint = c.ink, modifier = Modifier.size(20.dp))
+                            Text("  Tarjeta", color = c.ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                             Text(
                                 "MODO PRUEBA",
                                 color = c.onAccent,
-                                fontSize = 10.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.background(c.accent, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp)
                             )
@@ -301,12 +344,12 @@ fun CheckoutScreen(
                     ErrorText(error)
                     PrimaryButton(
                         "Pagar ${mxn(ShopRules.total(lines))}",
-                        onClick = { viewModel.pay(address) },
+                        onClick = { viewModel.pay(address, cardName) },
                         accent = true,
                         enabled = p is CheckoutPhase.Reserved && lines.isNotEmpty(),
                         loading = p is CheckoutPhase.Paying
                     )
-                    MutedText("🔒 Monzatti cobra una comisión a la marca, no a ti.")
+                    MutedText("Monzatti cobra una comisión a la marca, no a ti.")
                 }
             }
         }
@@ -315,7 +358,7 @@ fun CheckoutScreen(
     }
 }
 
-/** Cuenta regresiva de la reserva (RN-02). Si vence, vuelve a apartar. */
+/** Cuenta regresiva de la reserva (RN-02). */
 @Composable
 private fun ReservationTimer(expiresAt: Long, onExpired: () -> Unit) {
     val c = MonzattiTheme.colors
@@ -363,7 +406,7 @@ fun OrderConfirmedScreen(
             modifier = Modifier.align(Alignment.CenterHorizontally)
         ) {
             Box(Modifier.size(88.dp).background(c.accent, CircleShape), contentAlignment = Alignment.Center) {
-                Text("✓", color = c.onAccent, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Filled.Check, contentDescription = null, tint = c.onAccent, modifier = Modifier.size(44.dp))
             }
         }
         Text(
@@ -388,7 +431,7 @@ fun OrdersScreen(onBack: () -> Unit, onShop: () -> Unit, viewModel: CartViewMode
     val orders by viewModel.orders.collectAsStateWithLifecycle()
     val loading by viewModel.loading.collectAsStateWithLifecycle()
     ScreenColumn {
-        BackLink("← Volver", onBack)
+        BackLink("Volver", onBack)
         Title("Mis pedidos")
         when {
             loading -> repeat(2) { Skeleton(Modifier.fillMaxWidth().height(120.dp), corner = 14.dp) }
@@ -412,8 +455,12 @@ private fun OrderCard(order: Order) {
             }
             Text(
                 order.status.uppercase(),
-                color = c.positive,
-                fontSize = 10.sp,
+                color = when (order.status.lowercase()) {
+                    "cancelado" -> c.error
+                    "pendiente" -> c.muted
+                    else -> c.positive
+                },
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             )

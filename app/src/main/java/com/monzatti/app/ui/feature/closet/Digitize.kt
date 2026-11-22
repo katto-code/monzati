@@ -1,5 +1,10 @@
 package com.monzatti.app.ui.feature.closet
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -128,7 +133,8 @@ private suspend fun <T> Task<T>.awaitResult(): T = suspendCancellableCoroutine {
 
 /**
  * 3. Fotos / escaneo de ropa: recorta el fondo (ML Kit Subject Segmentation), sugiere categoría
- * (Image Labeling) y color (píxeles de la prenda). Todo corre en el celular, sin enviar la foto.
+ * (Image Labeling) y color (píxeles de la prenda). El análisis corre en el celular; al guardar, la foto se
+ * respalda en la cuenta (Storage privado) para no perderla al cambiar de celular.
  */
 @HiltViewModel
 class DigitizeViewModel @Inject constructor(
@@ -185,6 +191,7 @@ class DigitizeViewModel @Inject constructor(
     }
 
     fun retake() {
+        images.discardDraft((_phase.value as? DigitizePhase.Review)?.imagePath)
         _phase.value = DigitizePhase.Camera
     }
 
@@ -200,6 +207,8 @@ class DigitizeViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        // Guardada o no, el borrador ya no hace falta (al guardar se copia con el id de la prenda).
+        images.discardDraft((_phase.value as? DigitizePhase.Review)?.imagePath)
         runCatching { segmenter?.close() }
         runCatching { labeler.close() }
     }
@@ -260,9 +269,9 @@ fun DigitizeScreen(onDone: () -> Unit, viewModel: DigitizeViewModel = hiltViewMo
                     CaptureStep(onBack = onDone, onCaptured = viewModel::process, onSkip = viewModel::skipPhoto, onError = viewModel::onCaptureError)
                 } else {
                     ScreenColumn {
-                        BackLink("← Mi closet", onDone)
+                        BackLink("Mi closet", onDone)
                         Title("Digitaliza tu prenda.")
-                        MutedText("Necesitamos la cámara para fotografiar la prenda. La foto se procesa en tu celular.")
+                        MutedText("Necesitamos la cámara para fotografiar la prenda. La foto se procesa en tu celular y, al guardarla, se respalda en tu cuenta (solo tú puedes verla).")
                         PrimaryButton("Permitir cámara", onClick = { launcher.launch(Manifest.permission.CAMERA) }, accent = true)
                         SecondaryButton("Registrar sin foto", onClick = viewModel::skipPhoto)
                     }
@@ -398,12 +407,12 @@ private fun CaptureStep(
                 Box(
                     Modifier.size(44.dp).background(Color(0xCC111111), CircleShape).clickable(onClick = onBack),
                     contentAlignment = Alignment.Center
-                ) { Text("←", color = Color.White, fontSize = 20.sp) }
+                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White) }
                 Spacer(Modifier.weight(1f))
                 Box(
                     Modifier.size(44.dp).background(Color(0xCC111111), CircleShape).clickable { useBack = !useBack },
                     contentAlignment = Alignment.Center
-                ) { Text("⟲", color = Color.White, fontSize = 20.sp) }
+                ) { Icon(Icons.Filled.Cameraswitch, contentDescription = "Cambiar de cámara", tint = Color.White) }
             }
         }
         Text(
@@ -460,7 +469,7 @@ private fun ReviewStep(review: DigitizePhase.Review, onRetake: () -> Unit, onDon
     val c = MonzattiTheme.colors
 
     ScreenColumn {
-        BackLink("← Mi closet", onDone)
+        BackLink("Mi closet", onDone)
         FieldLabel(if (review.imagePath != null) "PRENDA DIGITALIZADA" else "NUEVA PRENDA")
         Title(if (review.imagePath != null) "Así quedó tu prenda." else "Captura cada detalle.")
         if (review.imagePath != null) {
@@ -475,7 +484,7 @@ private fun ReviewStep(review: DigitizePhase.Review, onRetake: () -> Unit, onDon
             }
             MutedText(
                 if (review.withBackground) "No pudimos recortar el fondo; se guardará la foto completa."
-                else "Fondo recortado en tu celular · Categoría y color sugeridos"
+                else "Fondo recortado en tu celular · Al guardar se respalda en tu cuenta"
             )
         }
         FieldLabel("NOMBRE DE LA PRENDA")

@@ -1,5 +1,15 @@
 package com.monzatti.app.ui.feature.closet
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -91,6 +101,22 @@ class ClosetViewModel @Inject constructor(private val closet: ClosetRepository) 
         closet.toggleFavorite(id).onFailure { _error.value = it.message }
     }
 
+    fun update(garment: Garment, onDone: () -> Unit) = viewModelScope.launch {
+        _saving.value = true
+        closet.update(garment.id, garment.name, garment.category, garment.size, garment.color)
+            .onSuccess { onDone() }
+            .onFailure { _error.value = it.message }
+        _saving.value = false
+    }
+
+    fun delete(id: String, onDone: () -> Unit) = viewModelScope.launch {
+        _saving.value = true
+        closet.delete(id)
+            .onSuccess { onDone() }
+            .onFailure { _error.value = it.message }
+        _saving.value = false
+    }
+
     fun add(name: String, category: String, size: String, color: String, onDone: () -> Unit) = viewModelScope.launch {
         _saving.value = true
         closet.add(name, category, size, color)
@@ -112,17 +138,25 @@ fun ClosetScreen(
     val error by viewModel.error.collectAsStateWithLifecycle()
     val loading by viewModel.loading.collectAsStateWithLifecycle()
     var category by rememberSaveable { mutableStateOf("Todo") }
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     val c = MonzattiTheme.colors
+
+    garments.firstOrNull { it.id == editingId }?.let { garment ->
+        EditGarmentDialog(garment, viewModel, onClose = { editingId = null })
+    }
 
     ScreenColumn {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f)) { Brand() }
-            TextButton(onClick = onChangeStyle) { Text("✦ Cambiar estilo", color = c.muted, fontSize = 11.sp) }
-            TextButton(onClick = onSignOut) { Text("Salir", color = c.muted, fontSize = 11.sp) }
+            TextButton(onClick = onChangeStyle) {
+                Icon(Icons.Outlined.Palette, contentDescription = null, tint = c.muted, modifier = Modifier.size(16.dp))
+                Text(" Cambiar estilo", color = c.muted, fontSize = 12.sp)
+            }
+            TextButton(onClick = onSignOut) { Text("Salir", color = c.muted, fontSize = 12.sp) }
         }
         Title("Mi closet")
         MutedText("${garments.size} prendas · Infinitas posibilidades")
-        SecondaryButton("📷  Probador con cámara", onClick = { onTryOn(null) })
+        SecondaryButton("Probador con cámara", icon = Icons.Outlined.PhotoCamera, onClick = { onTryOn(null) })
         ChoiceRow(listOf("Todo") + GarmentCategories, category) { category = it }
         ErrorText(error)
         val visible = garments.filter { category == "Todo" || it.category == category }
@@ -145,14 +179,23 @@ fun ClosetScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(garment.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = c.ink)
                             TextButton(onClick = { viewModel.toggleFavorite(garment.id) }, contentPadding = PaddingValues(0.dp)) {
-                                Text(if (garment.favorite) "♥" else "♡", color = c.accent, fontSize = 18.sp)
+                                Icon(
+                                    if (garment.favorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    contentDescription = if (garment.favorite) "Quitar de favoritas" else "Marcar como favorita",
+                                    tint = c.accent
+                                )
                             }
                         }
                         MutedText(garment.detail)
                         if (garment.toTryOnItem() != null) {
                             TextButton(onClick = { onTryOn(garment.id) }, contentPadding = PaddingValues(0.dp)) {
-                                Text("📷 Probármela", color = c.muted, fontSize = 10.sp)
+                                Icon(Icons.Outlined.PhotoCamera, contentDescription = null, tint = c.muted, modifier = Modifier.size(16.dp))
+                                Text(" Probármela", color = c.muted, fontSize = 12.sp)
                             }
+                        }
+                        TextButton(onClick = { editingId = garment.id }, contentPadding = PaddingValues(0.dp)) {
+                            Icon(Icons.Outlined.Edit, contentDescription = null, tint = c.muted, modifier = Modifier.size(16.dp))
+                            Text(" Editar", color = c.muted, fontSize = 12.sp)
                         }
                     }
                 }
@@ -160,6 +203,56 @@ fun ClosetScreen(
         }
         PrimaryButton("+  Nueva prenda", onClick = onAdd, accent = true)
     }
+}
+
+@Composable
+private fun EditGarmentDialog(garment: Garment, viewModel: ClosetViewModel, onClose: () -> Unit) {
+    val saving by viewModel.saving.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
+    var name by rememberSaveable(garment.id) { mutableStateOf(garment.name) }
+    var category by rememberSaveable(garment.id) { mutableStateOf(garment.category) }
+    var size by rememberSaveable(garment.id) { mutableStateOf(garment.size.ifBlank { "M" }) }
+    var color by rememberSaveable(garment.id) { mutableStateOf(garment.color.ifBlank { "Negro" }) }
+    var confirmDelete by rememberSaveable(garment.id) { mutableStateOf(false) }
+    val c = MonzattiTheme.colors
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = c.background,
+        title = { Text(if (confirmDelete) "¿Borrar «${garment.name}»?" else "Editar prenda", color = c.ink) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (confirmDelete) {
+                    MutedText("Se borra de tu closet y su foto de tu cuenta. No se puede deshacer.")
+                } else {
+                    FieldLabel("NOMBRE")
+                    AppTextField(name, { name = it })
+                    FieldLabel("CATEGORÍA")
+                    ChoiceRow(GarmentCategories, category) { category = it }
+                    FieldLabel("COLOR")
+                    ColorChoiceRow(color) { color = it }
+                    FieldLabel("TALLA")
+                    ChoiceRow(GarmentSizes, size) { size = it }
+                }
+                ErrorText(error)
+            }
+        },
+        confirmButton = {
+            if (confirmDelete) {
+                TextButton(onClick = { viewModel.delete(garment.id, onClose) }, enabled = !saving) { Text("Borrar", color = c.accent) }
+            } else {
+                TextButton(
+                    onClick = { viewModel.update(garment.copy(name = name, category = category, size = size, color = color), onClose) },
+                    enabled = !saving
+                ) { Text("Guardar", color = c.accent) }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (confirmDelete) confirmDelete = false else confirmDelete = true }) {
+                Text(if (confirmDelete) "Cancelar" else "Borrar prenda", color = c.muted)
+            }
+        }
+    )
 }
 
 @Composable
@@ -181,7 +274,7 @@ internal fun ColorChoiceRow(selected: String, onSelect: (String) -> Unit) {
             ) {
                 Box(Modifier.size(14.dp).background(Color(argb), CircleShape).border(1.dp, c.line, CircleShape))
                 Spacer(Modifier.width(6.dp))
-                Text(name, fontSize = 11.sp, color = if (isSelected) c.onAccent else c.ink)
+                Text(name, fontSize = 12.sp, color = if (isSelected) c.onAccent else c.ink)
             }
         }
     }

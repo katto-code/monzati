@@ -26,6 +26,8 @@ data class MonzattiColors(
     /** Logotipo MONZATTI. */
     val brand: Color,
     val positive: Color,
+    /** Mensajes de error y estados cancelados. */
+    val error: Color,
     /** Colores de la paleta original, para vistas previas. */
     val swatches: List<Color>
 )
@@ -45,6 +47,7 @@ fun StylePalette.colors(): MonzattiColors = when (this) {
         onAccent = Color(0xFF171717),
         brand = Color(0xFFC9A227),
         positive = Color(0xFF2A8A3A),
+        error = Color(0xFFB3261E),
         swatches = listOf(Color(0xFF171717), Color(0xFFC9A227), Color(0xFFF3F2EF), Color(0xFF77746F), Color(0xFFE4E1DC))
     )
 
@@ -62,6 +65,7 @@ fun StylePalette.colors(): MonzattiColors = when (this) {
         onAccent = Color(0xFF3B2A24),
         brand = Color(0xFFC8AD7F),
         positive = Color(0xFF5E7F4F),
+        error = Color(0xFFB3261E),
         swatches = listOf(Color(0xFFFFFFF0), Color(0xFFFFF8E7), Color(0xFFF4C2C2), Color(0xFFFADADD), Color(0xFFDCAE96), Color(0xFFC8AD7F))
     )
 
@@ -73,12 +77,14 @@ fun StylePalette.colors(): MonzattiColors = when (this) {
         ink = Color(0xFFE5E4E2),
         muted = Color(0xFFADABA8),
         line = Color(0xFF444444),
-        primary = Color(0xFF4A0404),
+        // 4A0404 casi desaparecía sobre el fondo negro; este rojo se distingue y el texto claro sigue a ~5:1.
+        primary = Color(0xFFB22222),
         onPrimary = Color(0xFFE5E4E2),
         accent = Color(0xFFC0C0C0),
         onAccent = Color(0xFF0B0B0B),
         brand = Color(0xFFC0C0C0),
         positive = Color(0xFF8FC79A),
+        error = Color(0xFFF2B8B5),
         swatches = listOf(Color(0xFF0B0B0B), Color(0xFF2C2C2C), Color(0xFF4A0404), Color(0xFF301934), Color(0xFFC0C0C0), Color(0xFFE5E4E2))
     )
 
@@ -96,6 +102,7 @@ fun StylePalette.colors(): MonzattiColors = when (this) {
         onAccent = Color(0xFF1C1C1C),
         brand = Color(0xFFFF5500),
         positive = Color(0xFF556B2F),
+        error = Color(0xFFB3261E),
         swatches = listOf(Color(0xFF1C1C1C), Color(0xFF8E8E8E), Color(0xFFF5F5DC), Color(0xFF556B2F), Color(0xFF5B7C99), Color(0xFFFF5500), Color(0xFF0047AB))
     )
 
@@ -113,6 +120,7 @@ fun StylePalette.colors(): MonzattiColors = when (this) {
         onAccent = Color(0xFF1B263B),
         brand = Color(0xFFD4AF37),
         positive = Color(0xFF1E3F20),
+        error = Color(0xFF9B1C1C),
         swatches = listOf(Color(0xFFFFFFFF), Color(0xFFD8C3A5), Color(0xFFA9A9A9), Color(0xFF1B263B), Color(0xFFC19A6B), Color(0xFF1E3F20), Color(0xFFD4AF37))
     )
 }
