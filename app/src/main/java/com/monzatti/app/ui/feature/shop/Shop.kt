@@ -104,8 +104,8 @@ class ShopViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            // El catálogo vive en el repositorio (singleton): solo se descarga la primera vez.
-            if (repository.products.value.isEmpty()) repository.refresh().onFailure { _message.value = it.message }
+            // Se muestra lo que ya hay y se actualiza en segundo plano: así aparecen productos nuevos y existencias al día.
+            repository.refresh().onFailure { _message.value = it.message }
             cart.refresh()
             _loading.value = false
         }

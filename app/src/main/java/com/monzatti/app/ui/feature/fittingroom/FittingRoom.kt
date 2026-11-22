@@ -1,5 +1,8 @@
 package com.monzatti.app.ui.feature.fittingroom
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Cast
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -102,7 +105,7 @@ fun FittingRoomScreen(
             FieldLabel("NUEVO · PROBADOR CON CÁMARA")
             Text("Vístete en tiempo real", color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             MutedText("Tu cámara detecta tu postura y la prenda te sigue al moverte.")
-            Box(Modifier.padding(top = 10.dp)) { PrimaryButton("📷  Probar con cámara", onClick = onCamera, accent = true) }
+            Box(Modifier.padding(top = 10.dp)) { PrimaryButton("Probar con cámara", onClick = onCamera, accent = true, icon = Icons.Outlined.PhotoCamera) }
         }
         val m = saved
         if (m == null) {
@@ -111,7 +114,7 @@ fun FittingRoomScreen(
             MeasurementsForm(m, saving, onSave = viewModel::save)
         }
         message?.let { MutedText(it) }
-        SecondaryButton("◎  Ver mi espejo", onClick = onMirror)
+        SecondaryButton("Ver mi espejo", icon = Icons.Outlined.Cast, onClick = onMirror)
     }
 }
 
@@ -197,7 +200,7 @@ fun MirrorScreen(onBack: () -> Unit, onCamera: () -> Unit, viewModel: MirrorView
             projection.live -> "Proyectando · aviso enviado"
             else -> "Guardado · sin aviso en vivo"
         }
-        InfoCard("◎  MONZATTI Mirror 01 · $status")
+        InfoCard("MONZATTI Mirror 01 · $status", icon = Icons.Outlined.Cast)
         // La pantalla del espejo siempre es oscura, como el hardware real.
         Box(
             Modifier
@@ -233,7 +236,7 @@ fun MirrorScreen(onBack: () -> Unit, onCamera: () -> Unit, viewModel: MirrorView
         ErrorText(error)
         MutedText("Cambia tu look desde el móvil y visualízalo al instante en tu espejo.")
         if (item == null) {
-            PrimaryButton("📷  Abrir probador con cámara", onClick = onCamera, accent = true)
+            PrimaryButton("Abrir probador con cámara", onClick = onCamera, accent = true, icon = Icons.Outlined.PhotoCamera)
         } else {
             PrimaryButton(
                 if (projection.projecting) "Detener proyección" else "Reanudar proyección",

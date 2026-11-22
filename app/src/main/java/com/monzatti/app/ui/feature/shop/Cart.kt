@@ -5,6 +5,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.filled.Check
 
 import androidx.compose.animation.AnimatedVisibility
@@ -378,7 +379,7 @@ private fun ReservationTimer(expiresAt: Long, onExpired: () -> Unit) {
         Modifier.fillMaxWidth().background(c.surfaceVariant, RoundedCornerShape(12.dp)).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("⏱", fontSize = 18.sp)
+        Icon(Icons.Outlined.Timer, contentDescription = null, tint = c.ink, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Text("Apartamos tus prendas por", color = c.ink, fontSize = 13.sp, modifier = Modifier.weight(1f))
         Text("%d:%02d".format(left / 60, left % 60), color = c.ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)

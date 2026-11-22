@@ -1,6 +1,10 @@
 package com.monzatti.app.ui.feature.business
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -160,8 +164,11 @@ private fun BusinessHeader(onChangeStyle: () -> Unit, onSignOut: () -> Unit) {
     val c = MonzattiTheme.colors
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) { FieldLabel("MONZATTI / BUSINESS") }
-        TextButton(onClick = onChangeStyle) { Text("✦ Estilo", color = c.muted, fontSize = 11.sp) }
-        TextButton(onClick = onSignOut) { Text("Salir", color = c.muted, fontSize = 11.sp) }
+        TextButton(onClick = onChangeStyle) {
+            Icon(Icons.Outlined.Palette, contentDescription = null, tint = c.muted, modifier = Modifier.size(16.dp))
+            Text(" Estilo", color = c.muted, fontSize = 12.sp)
+        }
+        TextButton(onClick = onSignOut) { Text("Salir", color = c.muted, fontSize = 12.sp) }
     }
 }
 

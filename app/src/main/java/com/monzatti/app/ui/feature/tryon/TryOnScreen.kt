@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Cast
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -402,7 +403,10 @@ private fun BottomPanel(
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(11.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent)
-            ) { Text("◎  Al espejo", fontWeight = FontWeight.SemiBold) }
+            ) {
+                Icon(Icons.Outlined.Cast, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("  Al espejo", fontWeight = FontWeight.SemiBold)
+            }
         }
         if (com.monzatti.app.BuildConfig.AI_PHOTOS_ENABLED) {
             Button(
