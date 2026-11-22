@@ -101,6 +101,19 @@ private fun NavHostController.switchTab(route: Any, root: Any) = navigate(route)
     restoreState = true
 }
 
+/**
+ * Regresa al catálogo desde el carrito, la confirmación o los pedidos. Con switchTab se restauraba la pila guardada
+ * de la tienda (que incluía la confirmación) y el botón «Seguir comprando» parecía no hacer nada.
+ */
+private fun NavHostController.backToShop() {
+    if (!popBackStack<ShopRoute>(inclusive = false)) {
+        navigate(ShopRoute) {
+            popUpTo(ClosetRoute)
+            launchSingleTop = true
+        }
+    }
+}
+
 @Composable
 fun MonzattiNavHost(session: SessionViewModel = hiltViewModel()) {
     val nav = rememberNavController()
@@ -227,7 +240,7 @@ fun MonzattiNavHost(session: SessionViewModel = hiltViewModel()) {
                 CartScreen(
                     onBack = { nav.popBackStack() },
                     onCheckout = { nav.navigate(CheckoutRoute) },
-                    onShop = { nav.switchTab(ShopRoute, ClosetRoute) }
+                    onShop = { nav.backToShop() }
                 )
             }
             composable<CheckoutRoute> {
@@ -242,11 +255,11 @@ fun MonzattiNavHost(session: SessionViewModel = hiltViewModel()) {
                 OrderConfirmedScreen(
                     orderId = backStack.toRoute<OrderConfirmedRoute>().orderId,
                     onOrders = { nav.navigate(OrdersRoute) { popUpTo<ShopRoute>() } },
-                    onShop = { nav.switchTab(ShopRoute, ClosetRoute) }
+                    onShop = { nav.backToShop() }
                 )
             }
             composable<OrdersRoute> {
-                OrdersScreen(onBack = { nav.popBackStack() }, onShop = { nav.switchTab(ShopRoute, ClosetRoute) })
+                OrdersScreen(onBack = { nav.popBackStack() }, onShop = { nav.backToShop() })
             }
             composable<AssistantRoute> { AssistantScreen(onTryOn = { nav.navigate(TryOnRoute()) }) }
             composable<FittingRoomRoute> {

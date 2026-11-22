@@ -71,6 +71,7 @@ import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenter
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 import com.monzatti.app.core.theme.MonzattiTheme
 import com.monzatti.app.data.local.GarmentImages
@@ -144,9 +145,12 @@ class DigitizeViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    private val segmenter by lazy {
-        SubjectSegmentation.getClient(SubjectSegmenterOptions.Builder().enableForegroundBitmap().build())
-    }
+    // Si el recorte falla, ML Kit deja el segmentador en mal estado: se descarta sin cerrarlo (cerrarlo truena en su
+    // propio hilo) y se crea otro para la siguiente foto.
+    private var segmenter: SubjectSegmenter? = null
+    private fun segmenter(): SubjectSegmenter = segmenter
+        ?: SubjectSegmentation.getClient(SubjectSegmenterOptions.Builder().enableForegroundBitmap().build())
+            .also { segmenter = it }
     private val labeler by lazy { ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS) }
 
     fun process(photo: Bitmap) {
@@ -158,7 +162,9 @@ class DigitizeViewModel @Inject constructor(
                 val input = InputImage.fromBitmap(bitmap, 0)
                 val labels = runCatching { labeler.process(input).awaitResult() }.getOrDefault(emptyList())
                     .map { it.text to it.confidence }
-                val cutout = runCatching { segmenter.process(input).awaitResult().foregroundBitmap }.getOrNull()
+                val cutout = runCatching { segmenter().process(input).awaitResult().foregroundBitmap }
+                    .onFailure { segmenter = null }
+                    .getOrNull()
                 val source = cutout ?: bitmap
                 val color = dominantColor(source, transparentBackground = cutout != null)
                 val category = GarmentSuggestions.category(labels) ?: GarmentCategories.first()
@@ -194,7 +200,7 @@ class DigitizeViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        runCatching { segmenter.close() }
+        runCatching { segmenter?.close() }
         runCatching { labeler.close() }
     }
 
