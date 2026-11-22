@@ -37,6 +37,7 @@ import io.github.jan.supabase.storage.storage
 import com.monzatti.app.data.local.GarmentImages
 import java.io.File
 import java.util.UUID
+import kotlin.math.roundToInt
 import io.github.jan.supabase.realtime.broadcast
 import io.github.jan.supabase.realtime.channel
 import com.monzatti.app.data.fake.OrderDateFormat
@@ -117,6 +118,13 @@ class SupabaseAuthRepository @Inject constructor(
         dto.toProfile(email.trim()).also { user.value = it }
     }
 
+    override suspend fun restoreSession(): UserProfile? = attempt {
+        client.auth.awaitInitialization()
+        val session = client.auth.currentUserOrNull() ?: return@attempt null
+        client.from("profiles").select { filter { eq("id", session.id) } }.decodeSingle<ProfileDto>()
+            .toProfile(session.email.orEmpty()).also { user.value = it }
+    }.getOrNull()
+
     override suspend fun signUp(request: SignUpRequest): Result<UserProfile> = attempt {
         require(PasswordRules.isValid(request.password)) { PasswordRules.DESCRIPTION }
         // El trigger handle_new_user crea la fila en profiles con estos metadatos.
@@ -129,10 +137,11 @@ class SupabaseAuthRepository @Inject constructor(
                 put("gender", request.gender.key)
             }
         }
-        // Si el proyecto pide confirmar el correo no habrá sesión todavía; el perfil local sirve para el flujo.
-        val id = client.auth.currentUserOrNull()?.id ?: ""
+        // Si el proyecto pide confirmar el correo no hay sesión todavía: sin id no se puede seguir.
+        val id = client.auth.currentUserOrNull()?.id
+            ?: error("Te enviamos un correo para confirmar tu cuenta. Confírmalo y luego inicia sesión.")
         UserProfile(id, request.fullName.trim(), request.email.trim(), request.role, request.gender, null)
-            .also { if (id.isNotEmpty()) user.value = it }
+            .also { user.value = it }
     }
 
     override suspend fun sendPasswordReset(email: String): Result<Unit> = attempt {
@@ -141,6 +150,8 @@ class SupabaseAuthRepository @Inject constructor(
 
     override suspend fun signOut() {
         attempt { client.auth.signOut() }
+        // Sin internet signOut() falla antes de borrar la sesión guardada: se borra a mano.
+        attempt { client.auth.clearSession() }
         user.value = null
     }
 
@@ -219,14 +230,15 @@ class SupabaseClosetRepository @Inject constructor(
 
 @Singleton
 class SupabaseProductRepository @Inject constructor(
-    private val client: SupabaseClient
+    private val client: SupabaseClient,
+    private val auth: SupabaseAuthRepository
 ) : ProductRepository {
 
     private val items = MutableStateFlow<List<Product>>(emptyList())
     override val products: StateFlow<List<Product>> = items.asStateFlow()
 
     override suspend fun refresh(): Result<Unit> = attempt {
-        val columns = Columns.raw("id, name, emoji, category, color, price_mxn, brands(id, name), product_variants(size, stock)")
+        val columns = Columns.raw("id, name, emoji, category, color, price_mxn, brands(id, name, owner_id), product_variants(size, stock)")
         items.value = client.from("products")
             .select(columns) { filter { eq("is_active", true) } }
             .decodeList<ProductDto>()
@@ -237,9 +249,10 @@ class SupabaseProductRepository @Inject constructor(
                     name = dto.name,
                     emoji = dto.emoji ?: "🧥",
                     category = dto.category.orEmpty(),
-                    price = dto.priceMxn.toInt(),
+                    price = dto.priceMxn.roundToInt(),
                     stockBySize = dto.variants.associate { it.size to it.stock },
-                    color = dto.color.orEmpty()
+                    color = dto.color.orEmpty(),
+                    ownerId = dto.brands?.ownerId
                 )
             }
     }
@@ -250,9 +263,9 @@ class SupabaseProductRepository @Inject constructor(
         val ownerId = client.userIdOrThrow()
         val brandId = client.from("brands").select { filter { eq("owner_id", ownerId) } }
             .decodeList<BrandDto>().firstOrNull()?.id
-            ?: client.from("brands").insert(BrandInsert(ownerId, "Tu marca")) { select() }.decodeSingle<BrandDto>().id
+            ?: client.from("brands").insert(BrandInsert(ownerId, auth.currentUser.value?.fullName?.trim().orEmpty().ifBlank { "Mi marca" })) { select() }.decodeSingle<BrandDto>().id
         val productId = client.from("products")
-            .insert(ProductInsert(brandId, product.name.trim(), "🧥", "Nuevo", product.price)) { select(Columns.list("id")) }
+            .insert(ProductInsert(brandId, product.name.trim(), emojiFor(product.category), product.category, product.price)) { select(Columns.list("id")) }
             .decodeSingle<IdDto>().id
         client.from("product_variants").insert(product.sizes.map { VariantInsert(productId, it, product.stockPerSize) })
         refresh().getOrThrow()
@@ -263,9 +276,9 @@ class SupabaseProductRepository @Inject constructor(
         SalesSummary(
             orders = row?.ordersCount?.toInt() ?: 0,
             units = row?.units?.toInt() ?: 0,
-            gross = row?.grossMxn?.toInt() ?: 0,
-            commission = row?.commissionMxn?.toInt() ?: 0,
-            net = row?.netMxn?.toInt() ?: 0
+            gross = row?.grossMxn?.roundToInt() ?: 0,
+            commission = row?.commissionMxn?.roundToInt() ?: 0,
+            net = row?.netMxn?.roundToInt() ?: 0
         )
     }
 }
@@ -297,7 +310,7 @@ class SupabaseCartRepository @Inject constructor(
                 emoji = product.emoji ?: "🧥",
                 color = product.color.orEmpty(),
                 size = variant.size,
-                unitPrice = product.priceMxn.toInt(),
+                unitPrice = product.priceMxn.roundToInt(),
                 quantity = dto.quantity,
                 stock = variant.stock
             )
@@ -345,6 +358,10 @@ class SupabaseCartRepository @Inject constructor(
         OffsetDateTime.parse(expires).toInstant().toEpochMilli()
     }
 
+    override suspend fun cancelCheckout(): Result<Unit> = attempt {
+        client.postgrest.rpc("cancel_checkout")
+    }
+
     override suspend fun confirmOrder(paymentRef: String, shippingAddress: String): Result<Order> = attempt {
         val params = buildJsonObject {
             put("p_payment_ref", paymentRef)
@@ -371,10 +388,10 @@ class SupabaseCartRepository @Inject constructor(
                         .atZoneSameInstant(ZoneId.systemDefault())
                         .format(OrderDateFormat),
                     status = dto.status.replaceFirstChar { it.uppercase() },
-                    lines = dto.items.map { OrderLine(it.productName, it.brandName, it.size, it.quantity, it.unitPriceMxn.toInt()) },
-                    subtotal = dto.subtotalMxn.toInt(),
-                    commission = dto.commissionMxn.toInt(),
-                    total = dto.totalMxn.toInt()
+                    lines = dto.items.map { OrderLine(it.productName, it.brandName, it.size, it.quantity, it.unitPriceMxn.roundToInt()) },
+                    subtotal = dto.subtotalMxn.roundToInt(),
+                    commission = dto.commissionMxn.roundToInt(),
+                    total = dto.totalMxn.roundToInt()
                 )
             }
     }
@@ -417,7 +434,13 @@ class SupabaseMirrorRepository @Inject constructor(
     }
 
     private suspend fun sendBroadcast(item: TryOnItem?, projecting: Boolean) {
-        val ch = channel ?: client.channel("mirror:${MirrorRepository.MIRROR_CODE}").also {
+        // Canal privado y por persona: la política de realtime.messages solo deja usar mirror:<tu id>.
+        val topic = "mirror:${client.userIdOrThrow()}"
+        if (channel?.topic?.endsWith(topic) == false) {
+            channel?.unsubscribe()
+            channel = null
+        }
+        val ch = channel ?: client.channel(topic) { isPrivate = true }.also {
             it.subscribe(blockUntilSubscribed = true)
             channel = it
         }

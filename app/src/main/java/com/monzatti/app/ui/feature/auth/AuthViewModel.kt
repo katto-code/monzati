@@ -37,11 +37,23 @@ class AuthViewModel @Inject constructor(
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
 
     fun signIn(email: String, password: String, role: UserRole, onSuccess: (UserProfile) -> Unit) = run {
-        auth.signIn(email, password, role).onSuccess { profile ->
-            // El estilo guardado en el perfil gana sobre el del dispositivo.
-            profile.style?.let { styles.setStyle(it) }
-            onSuccess(profile)
+        auth.signIn(email, password, role).onSuccess { enter(it, onSuccess) }
+    }
+
+    /** Si quedó una sesión abierta, entra directo sin pedir la contraseña otra vez. */
+    fun restore(onSuccess: (UserProfile) -> Unit) {
+        if (_state.value.loading) return
+        _state.update { it.copy(loading = true) }
+        viewModelScope.launch {
+            auth.restoreSession()?.let { enter(it, onSuccess) }
+            _state.update { it.copy(loading = false) }
         }
+    }
+
+    private suspend fun enter(profile: UserProfile, onSuccess: (UserProfile) -> Unit) {
+        // El estilo guardado en el perfil gana sobre el del dispositivo.
+        profile.style?.let { styles.setStyle(it) }
+        onSuccess(profile)
     }
 
     fun signUp(request: SignUpRequest, onSuccess: (UserProfile) -> Unit) = run {

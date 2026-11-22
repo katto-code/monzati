@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import com.monzatti.app.core.config.DemoMode
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -51,6 +52,7 @@ fun LoginScreen(
     var role by rememberSaveable { mutableStateOf(UserRole.USUARIO) }
     var email by rememberSaveable { mutableStateOf("hola@ejemplo.com") }
     var password by rememberSaveable { mutableStateOf("12345678") }
+    LaunchedEffect(Unit) { viewModel.restore(onLoggedIn) }
 
     ScreenColumn {
         Brand()
@@ -58,8 +60,11 @@ fun LoginScreen(
         Title("Vuelve a ti.")
         MutedText("Tu closet, tu espejo y tu próxima versión.")
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            UserRole.selectable.forEach { ChoiceChip(it.label, selected = role == it, onClick = { role = it }) }
+        // Con Supabase el tipo de cuenta sale del perfil; elegirlo solo tiene sentido en el modo demo.
+        if (viewModel.isDemo) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                UserRole.selectable.forEach { ChoiceChip(it.label, selected = role == it, onClick = { role = it }) }
+            }
         }
         FieldLabel("CORREO ELECTRÓNICO")
         AppTextField(email, { email = it })

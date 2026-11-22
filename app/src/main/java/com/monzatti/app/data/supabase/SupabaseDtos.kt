@@ -45,7 +45,7 @@ data class GarmentInsert(
 data class FavoriteUpdate(@SerialName("is_favorite") val isFavorite: Boolean)
 
 @Serializable
-data class BrandDto(val id: String, val name: String)
+data class BrandDto(val id: String, val name: String, @SerialName("owner_id") val ownerId: String? = null)
 
 @Serializable
 data class BrandInsert(@SerialName("owner_id") val ownerId: String, val name: String)

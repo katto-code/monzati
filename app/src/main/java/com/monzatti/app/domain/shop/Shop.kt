@@ -72,6 +72,9 @@ interface CartRepository {
     /** RN-02: aparta todo el carrito. Devuelve el instante (epoch ms) en que vence la reserva. */
     suspend fun startCheckout(): Result<Long>
 
+    /** RN-02: libera la reserva al salir del pago sin pagar. */
+    suspend fun cancelCheckout(): Result<Unit>
+
     /** Pago de prueba: convierte la reserva en pedido pagado y vacía el carrito. */
     suspend fun confirmOrder(paymentRef: String, shippingAddress: String): Result<Order>
 

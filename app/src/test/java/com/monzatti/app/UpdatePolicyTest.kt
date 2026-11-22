@@ -58,7 +58,8 @@ class UpdatePolicyTest {
         assertFalse(UpdatePolicy.isExpectedPackage("com.monzatti.app", "com.otra.app", 5, r))
         assertFalse(UpdatePolicy.isExpectedPackage("com.monzatti.app", "com.monzatti.app", 4, r))
         assertFalse(UpdatePolicy.isExpectedPackage("com.monzatti.app", null, null, r))
-        assertTrue(UpdatePolicy.sha256Matches(null, "abc"))
+        assertFalse(UpdatePolicy.sha256Matches(null, "abc"))
+        assertFalse(UpdatePolicy.sha256Matches("  ", "abc"))
         assertTrue(UpdatePolicy.sha256Matches("ABC", "abc"))
         assertFalse(UpdatePolicy.sha256Matches("abd", "abc"))
     }

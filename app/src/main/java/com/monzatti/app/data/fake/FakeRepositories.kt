@@ -40,6 +40,9 @@ import kotlinx.coroutines.flow.update
  * así la app funciona como demo sin servidor.
  */
 
+/** Identificador fijo del socio del modo demo, dueño de los productos de Francesa. */
+const val DEMO_PARTNER_ID = "demo-socio"
+
 @Singleton
 class FakeAuthRepository @Inject constructor() : AuthRepository {
 
@@ -51,7 +54,8 @@ class FakeAuthRepository @Inject constructor() : AuthRepository {
         if (password.isBlank()) return Result.failure(IllegalArgumentException("Escribe tu contraseña."))
         val name = if (role == UserRole.SOCIO) "Mariana" else email.substringBefore('@').replaceFirstChar { it.uppercase() }
         val profile = UserProfile(
-            id = "demo-${email.lowercase()}",
+            // El socio del demo siempre es el mismo: es dueño de la marca Francesa (como socio@monzatti.test en Supabase).
+            id = if (role == UserRole.SOCIO) DEMO_PARTNER_ID else "demo-${email.lowercase()}",
             fullName = name,
             email = email,
             role = role,
@@ -61,6 +65,9 @@ class FakeAuthRepository @Inject constructor() : AuthRepository {
         user.value = profile
         return Result.success(profile)
     }
+
+    // Demo en memoria: la sesión vive mientras viva el proceso.
+    override suspend fun restoreSession(): UserProfile? = user.value
 
     override suspend fun signUp(request: SignUpRequest): Result<UserProfile> {
         if (request.fullName.isBlank()) return Result.failure(IllegalArgumentException("Escribe tu nombre."))
@@ -137,18 +144,18 @@ class FakeClosetRepository @Inject constructor(private val images: GarmentImages
 }
 
 @Singleton
-class FakeProductRepository @Inject constructor() : ProductRepository {
+class FakeProductRepository @Inject constructor(private val auth: FakeAuthRepository) : ProductRepository {
 
     private val items = MutableStateFlow(
         listOf(
             // Marcas ficticias; precios en el rango de las marcas mexicanas analizadas ($1,500 a $5,000 MXN).
-            Product("p1", "Francesa", "Blusa de seda", "👚", "Blusas", 2290, mapOf("XS" to 2, "S" to 5, "M" to 6, "L" to 4, "XL" to 1), "Rosa pastel"),
+            Product("p1", "Francesa", "Blusa de seda", "👚", "Blusas", 2290, mapOf("XS" to 2, "S" to 5, "M" to 6, "L" to 4, "XL" to 1), "Rosa pastel", DEMO_PARTNER_ID),
             Product("p2", "Nómada", "Vestido midi", "👗", "Vestidos", 3490, mapOf("XS" to 0, "S" to 1, "M" to 2, "L" to 0, "XL" to 0), "Vino"),
             Product("p3", "Raíz", "Pantalón sastre", "👖", "Pantalones", 1890, mapOf("XS" to 0, "S" to 0, "M" to 0, "L" to 0, "XL" to 0), "Negro"),
             Product("p4", "Taller Norte", "Blazer camel", "🧥", "Chamarras", 4290, mapOf("S" to 3, "M" to 4, "L" to 2), "Camel"),
             Product("p5", "Cobalto", "Chamarra bomber", "🧥", "Chamarras", 2890, mapOf("S" to 2, "M" to 5, "L" to 5, "XL" to 2), "Verde oliva"),
             Product("p6", "Luna Roja", "Vestido de encaje", "👗", "Vestidos", 3890, mapOf("XS" to 1, "S" to 2, "M" to 2), "Negro"),
-            Product("p7", "Francesa", "Blusa con moño", "👚", "Blusas", 1690, mapOf("S" to 4, "M" to 4, "L" to 3), "Marfil"),
+            Product("p7", "Francesa", "Blusa con moño", "👚", "Blusas", 1690, mapOf("S" to 4, "M" to 4, "L" to 3), "Marfil", DEMO_PARTNER_ID),
             Product("p8", "Urbe", "Playera oversize", "👕", "Blusas", 1590, mapOf("M" to 6, "L" to 6, "XL" to 4), "Naranja")
         )
     )
@@ -163,15 +170,19 @@ class FakeProductRepository @Inject constructor() : ProductRepository {
         if (product.name.isBlank()) return Result.failure(IllegalArgumentException("Escribe el nombre del producto."))
         if (product.price < 0) return Result.failure(IllegalArgumentException("El precio no puede ser negativo."))
         if (product.sizes.isEmpty()) return Result.failure(IllegalArgumentException("Elige al menos una talla."))
+        val owner = auth.currentUser.value
         val new = Product(
             id = UUID.randomUUID().toString(),
-            brand = "Tu marca",
+            // Igual que en Supabase: si el socio ya tiene marca se usa esa; si no, una con su nombre.
+            brand = items.value.firstOrNull { owner != null && it.ownerId == owner.id }?.brand
+                ?: owner?.fullName?.trim().orEmpty().ifBlank { "Mi marca" },
             name = product.name.trim(),
-            emoji = "🧥",
-            category = "Nuevo",
+            emoji = emojiFor(product.category),
+            category = product.category,
             price = product.price,
             stockBySize = product.sizes.associateWith { product.stockPerSize },
-            color = "Gris"
+            color = "Gris",
+            ownerId = owner?.id
         )
         items.update { it + new }
         return Result.success(Unit)
@@ -287,6 +298,11 @@ class FakeCartRepository @Inject constructor(private val catalog: FakeProductRep
         val expires = System.currentTimeMillis() + ShopRules.RESERVATION_MINUTES * 60_000L
         reservationExpiresAt = expires
         return Result.success(expires)
+    }
+
+    override suspend fun cancelCheckout(): Result<Unit> {
+        reservationExpiresAt = null
+        return Result.success(Unit)
     }
 
     override suspend fun confirmOrder(paymentRef: String, shippingAddress: String): Result<Order> {

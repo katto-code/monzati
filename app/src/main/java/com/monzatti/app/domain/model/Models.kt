@@ -86,7 +86,9 @@ data class Product(
     val category: String,
     val price: Int,
     val stockBySize: Map<String, Int>,
-    val color: String = ""
+    val color: String = "",
+    /** Dueño de la marca (socio); null en el catálogo de Monzatti. */
+    val ownerId: String? = null
 ) {
     val totalStock: Int get() = stockBySize.values.sum()
     val isLowStock: Boolean get() = totalStock in 1..LOW_STOCK_LIMIT
@@ -113,7 +115,8 @@ data class NewProduct(
     val name: String,
     val price: Int,
     val sizes: List<String>,
-    val stockPerSize: Int
+    val stockPerSize: Int,
+    val category: String = GarmentCategories.first()
 )
 
 class OutOfStockException(size: String) : IllegalStateException("La talla $size está agotada.")

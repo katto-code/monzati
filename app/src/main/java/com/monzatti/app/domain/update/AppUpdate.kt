@@ -47,7 +47,8 @@ object UpdatePolicy {
         archivePackage == packageName && archiveVersion == release.versionCode.toLong()
 
     fun sha256Matches(expected: String?, actual: String): Boolean =
-        expected.isNullOrBlank() || expected.equals(actual, ignoreCase = true)
+        // Sin hash publicado no hay forma de verificar el APK: no se instala.
+        !expected.isNullOrBlank() && expected.equals(actual, ignoreCase = true)
 }
 
 /** Estado del servicio de actualizaciones, para el diálogo y la pantalla «Acerca de». */

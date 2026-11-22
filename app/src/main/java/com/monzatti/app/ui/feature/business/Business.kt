@@ -28,7 +28,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.monzatti.app.core.theme.MonzattiTheme
+import com.monzatti.app.domain.model.GarmentCategories
 import com.monzatti.app.domain.model.GarmentSizes
+import com.monzatti.app.ui.components.ChoiceRow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import com.monzatti.app.domain.model.NewProduct
 import com.monzatti.app.domain.model.Product
 import com.monzatti.app.domain.model.UserProfile
@@ -62,7 +67,10 @@ class BusinessViewModel @Inject constructor(
 ) : ViewModel() {
 
     val user: StateFlow<UserProfile?> = auth.currentUser
-    val products: StateFlow<List<Product>> = repository.products
+    /** Solo los productos de las marcas del socio con sesión. */
+    val products: StateFlow<List<Product>> = combine(repository.products, auth.currentUser) { list, user ->
+        list.filter { user != null && it.ownerId == user.id }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -83,7 +91,7 @@ class BusinessViewModel @Inject constructor(
         }
     }
 
-    fun publish(name: String, price: String, sizes: Set<String>, stock: String, onDone: () -> Unit) {
+    fun publish(name: String, price: String, sizes: Set<String>, stock: String, category: String, onDone: () -> Unit) {
         val parsedPrice = price.trim().toIntOrNull()
         val parsedStock = stock.trim().toIntOrNull()
         when {
@@ -91,7 +99,7 @@ class BusinessViewModel @Inject constructor(
             parsedStock == null || parsedStock < 0 -> _error.value = "Escribe existencias válidas."
             else -> viewModelScope.launch {
                 _publishing.value = true
-                repository.publish(NewProduct(name, parsedPrice, GarmentSizes.filter { it in sizes }, parsedStock))
+                repository.publish(NewProduct(name, parsedPrice, GarmentSizes.filter { it in sizes }, parsedStock, category))
                     .onSuccess { _error.value = null; onDone() }
                     .onFailure { _error.value = it.message }
                 _publishing.value = false
@@ -99,6 +107,9 @@ class BusinessViewModel @Inject constructor(
         }
     }
 }
+
+/** Las mismas categorías que filtran la tienda (sin zapatos, que el catálogo aún no muestra). */
+private val ProductCategories = GarmentCategories.filter { it != "Zapatos" }
 
 @Composable
 private fun BusinessHeader(onChangeStyle: () -> Unit, onSignOut: () -> Unit) {
@@ -164,6 +175,7 @@ fun NewProductScreen(onPublished: () -> Unit, viewModel: BusinessViewModel = hil
     var price by rememberSaveable { mutableStateOf("2100") }
     var stock by rememberSaveable { mutableStateOf("5") }
     var sizes by rememberSaveable { mutableStateOf(setOf("S", "M", "L")) }
+    var category by rememberSaveable { mutableStateOf(ProductCategories.first()) }
     ScreenColumn {
         Title("Nuevo producto")
         MutedText("Comparte tu próxima pieza favorita.")
@@ -171,12 +183,14 @@ fun NewProductScreen(onPublished: () -> Unit, viewModel: BusinessViewModel = hil
         AppTextField(name, { name = it })
         FieldLabel("PRECIO · MXN")
         AppTextField(price, { price = it }, number = true)
+        FieldLabel("CATEGORÍA")
+        ChoiceRow(ProductCategories, category) { category = it }
         FieldLabel("TALLAS")
         MultiChoiceRow(GarmentSizes, sizes) { size -> sizes = if (size in sizes) sizes - size else sizes + size }
         FieldLabel("EXISTENCIAS POR TALLA")
         AppTextField(stock, { stock = it }, number = true)
         ErrorText(error)
-        PrimaryButton("Publicar producto", onClick = { viewModel.publish(name, price, sizes, stock, onPublished) }, accent = true, loading = publishing)
+        PrimaryButton("Publicar producto", onClick = { viewModel.publish(name, price, sizes, stock, category, onPublished) }, accent = true, loading = publishing)
         MutedText("El producto aparecerá en el catálogo de la tienda al publicarlo.")
     }
 }

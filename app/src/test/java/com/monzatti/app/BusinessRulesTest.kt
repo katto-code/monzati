@@ -1,12 +1,15 @@
 package com.monzatti.app
 
+import com.monzatti.app.data.fake.FakeAuthRepository
 import com.monzatti.app.data.fake.FakeCartRepository
 import com.monzatti.app.data.fake.FakeProductRepository
 import com.monzatti.app.domain.shop.ShopRules
 import com.monzatti.app.domain.shop.mxn
 import com.monzatti.app.domain.model.OutOfStockException
 import com.monzatti.app.domain.model.PasswordRules
+import com.monzatti.app.domain.model.NewProduct
 import com.monzatti.app.domain.model.Product
+import com.monzatti.app.domain.model.UserRole
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -32,7 +35,7 @@ class BusinessRulesTest {
 
     @Test
     fun cartRejectsOutOfStockAndCountsUnits() = runTest {
-        val catalog = FakeProductRepository()
+        val catalog = FakeProductRepository(FakeAuthRepository())
         val cart = FakeCartRepository(catalog).apply { simulatedDelayMs = 0 }
         val soldOut = catalog.products.value.first { it.totalStock == 0 }
         assertTrue(cart.add(soldOut.id, "M").exceptionOrNull() is OutOfStockException)
@@ -47,7 +50,7 @@ class BusinessRulesTest {
 
     @Test
     fun cannotAddMoreThanStock() = runTest {
-        val catalog = FakeProductRepository()
+        val catalog = FakeProductRepository(FakeAuthRepository())
         val cart = FakeCartRepository(catalog).apply { simulatedDelayMs = 0 }
         val product = catalog.products.value.first { it.id == "p2" } // Vestido midi: 2 en M
         assertTrue(cart.add(product.id, "M", 2).isSuccess)
@@ -56,7 +59,7 @@ class BusinessRulesTest {
 
     @Test
     fun checkoutNeedsReservationAndDecrementsStock() = runTest {
-        val catalog = FakeProductRepository()
+        val catalog = FakeProductRepository(FakeAuthRepository())
         val cart = FakeCartRepository(catalog).apply { simulatedDelayMs = 0 }
         cart.add("p1", "M", 2)
         // Sin reserva previa (RN-02) no hay pago.
@@ -69,6 +72,19 @@ class BusinessRulesTest {
         assertEquals(4, catalog.stockOf("p1", "M"))
         assertTrue(cart.lines.value.isEmpty())
         assertEquals(1, cart.orders.value.size)
+    }
+
+    @Test
+    fun publishedProductBelongsToPartnerBrand() = runTest {
+        val auth = FakeAuthRepository()
+        val socio = auth.signIn("mariana@ejemplo.com", "x", UserRole.SOCIO).getOrThrow()
+        val catalog = FakeProductRepository(auth)
+        catalog.publish(NewProduct("Falda plisada", 1200, listOf("M"), 3, "Vestidos")).getOrThrow()
+        // El socio del demo ya es dueño de los 2 productos de Francesa; lo nuevo se publica en esa misma marca.
+        val mine = catalog.products.value.filter { it.ownerId == socio.id }
+        assertEquals(3, mine.size)
+        assertTrue(mine.all { it.brand == "Francesa" })
+        assertEquals("Vestidos", mine.last().category)
     }
 
     @Test

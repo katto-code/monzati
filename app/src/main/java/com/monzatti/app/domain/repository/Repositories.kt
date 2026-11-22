@@ -16,6 +16,8 @@ interface AuthRepository {
     val currentUser: StateFlow<UserProfile?>
     suspend fun signIn(email: String, password: String, role: UserRole): Result<UserProfile>
     suspend fun signUp(request: SignUpRequest): Result<UserProfile>
+    /** Sesión guardada de una apertura anterior, o null si hay que iniciar sesión. */
+    suspend fun restoreSession(): UserProfile?
     suspend fun sendPasswordReset(email: String): Result<Unit>
     suspend fun signOut()
 }
