@@ -395,13 +395,15 @@ private fun BottomPanel(
                 colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent)
             ) { Text("◎  Al espejo", fontWeight = FontWeight.SemiBold) }
         }
-        Button(
-            onClick = onAiPhoto,
-            enabled = selected != null,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-            shape = RoundedCornerShape(11.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = c.surfaceVariant, contentColor = c.ink)
-        ) { Text("📸  Foto realista con IA", fontWeight = FontWeight.SemiBold) }
+        if (com.monzatti.app.BuildConfig.AI_PHOTOS_ENABLED) {
+            Button(
+                onClick = onAiPhoto,
+                enabled = selected != null,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                shape = RoundedCornerShape(11.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = c.surfaceVariant, contentColor = c.ink)
+            ) { Text("📸  Foto realista con IA", fontWeight = FontWeight.SemiBold) }
+        }
         Text(
             "Desliza de lado para cambiar de prenda · Ver espejo →",
             color = c.muted,

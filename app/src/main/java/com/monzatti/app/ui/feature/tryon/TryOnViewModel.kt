@@ -101,7 +101,7 @@ class TryOnViewModel @Inject constructor(
 
     /** Botón "Foto con IA": pide consentimiento la primera vez y luego hace la cuenta regresiva. */
     fun startAiPhoto(capture: suspend () -> Bitmap) {
-        if (selected.value == null) return
+        if (selected.value == null || !com.monzatti.app.BuildConfig.AI_PHOTOS_ENABLED) return
         if (!ai.isConfigured) {
             _ai.value = AiPhotoState.Failed(
                 "El servidor de IA no está configurado. Agrega TRYON_SERVER_URL y TRYON_SERVER_TOKEN en " +

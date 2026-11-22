@@ -35,7 +35,8 @@ Sin configuración, la app funciona en **modo demo** con datos de ejemplo en mem
 - **Closet** y **digitalización de prendas:** cámara con captura automática, recorte de fondo, categoría y color
   sugeridos (ML Kit en el celular).
 - **Probador con cámara:** la prenda (foto real o dibujo) sigue el cuerpo en vivo; «Al espejo» la manda al espejo 3D.
-- **Foto realista con IA:** consentimiento → cuenta regresiva → imagen generada por el servidor de IA.
+- **Foto realista con IA** (desactivada por defecto; `monzatti.aiPhotos=true` en `gradle.properties` para activarla):
+  consentimiento → cuenta regresiva → imagen generada por el servidor de IA.
 - **Tienda:** catálogo con filtros, detalle con tallas y existencias, **carrito**, pago de prueba con reserva de 10 min,
   confirmación e historial de pedidos.
 - **Socio comercial:** ventas con comisión (12 %), alta de productos e inventario por talla.
