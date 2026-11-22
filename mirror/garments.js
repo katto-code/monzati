@@ -1,6 +1,7 @@
 // Prendas 3D procedurales para el espejo. Se reemplazan por modelos .glb del equipo cuando existan
 // (ver docs/guia-modelado-3d.md): la colocación sobre el cuerpo es la misma.
 import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 /** Catálogo de demostración (mismo que la app). kind: BLOUSE | JACKET | DRESS */
 export const CATALOG = [
@@ -11,8 +12,32 @@ export const CATALOG = [
   { id: 'p6', name: 'Vestido de encaje', brand: 'Luna Roja', kind: 'DRESS', color: '#1C1C1C' },
   { id: 'p7', name: 'Blusa con moño', brand: 'Francesa', kind: 'BLOUSE', color: '#F0E6D2' },
   { id: 'p8', name: 'Playera oversize', brand: 'Urbe', kind: 'BLOUSE', color: '#FF5500' },
-  { id: 'g5', name: 'Chamarra de mezclilla', brand: 'Mi closet', kind: 'JACKET', color: '#5B7C99' }
+  { id: 'g5', name: 'Chamarra de mezclilla', brand: 'Mi closet', kind: 'JACKET', color: '#5B7C99' },
+  // Modelo real (.obj). top: borde superior del cuello sobre la línea de hombros (en anchos de hombro);
+  // scale: holgura respecto al largo del torso; back: cuánto se recorre hacia la espalda. Se ajustan a ojo por modelo.
+  { id: 'm1', name: 'Playera 3D', brand: 'Modelo OBJ', kind: 'BLOUSE', color: '#2E5C8A', model: 'models/playera.obj', top: 0.18, scale: 1.25, back: 0.06 }
 ];
+
+const modelCache = new Map();
+
+/**
+ * Carga un .obj una sola vez y lo deja listo para colocarlo: el centro del borde superior queda en el origen y
+ * userData.height guarda su alto, para escalarlo al largo del torso de cada persona.
+ */
+function loadModel(url) {
+  if (!modelCache.has(url)) {
+    modelCache.set(url, new OBJLoader().loadAsync(url).then(obj => {
+      const box = new THREE.Box3().setFromObject(obj);
+      const center = box.getCenter(new THREE.Vector3());
+      obj.position.set(-center.x, -box.max.y, -center.z);
+      const holder = new THREE.Group();
+      holder.add(obj);
+      holder.userData.height = box.max.y - box.min.y;
+      return holder;
+    }));
+  }
+  return modelCache.get(url);
+}
 
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpA = new THREE.Vector3();
@@ -82,6 +107,17 @@ export class Garment3D {
 
   setGarment(spec) {
     this.kind = spec.kind || 'BLOUSE';
+    // Modelo 3D real: mientras carga se ve la prenda dibujada por código.
+    this.spec = spec;
+    if (this.model) { this.torso.remove(this.model); this.model = null; }
+    if (spec.model) {
+      loadModel(spec.model).then(holder => {
+        if (this.spec !== spec) return; // ya se eligió otra prenda
+        holder.traverse(o => { if (o.isMesh) o.material = this.material; });
+        this.model = holder;
+        this.torso.add(holder);
+      }).catch(e => console.warn('No se pudo cargar el modelo', spec.model, e));
+    }
     const c = new THREE.Color(spec.color || '#888888');
     this.material.color.copy(c);
     this.material.sheenColor.copy(c.clone().lerp(new THREE.Color('#ffffff'), 0.35));
@@ -123,6 +159,15 @@ export class Garment3D {
     const L = torsoLen * (1 + hem);
     const girth = kind === 'JACKET' ? 1.1 : 1.0;
     const depth = 0.66;
+
+    // Modelo real: es una pieza rígida que sigue hombros y cadera (sin esqueleto, las mangas no siguen los brazos).
+    if (this.model) {
+      [this.torsoMesh, this.cap, this.skirt, this.inner].forEach(m => { m.visible = false; });
+      this.sleeves.forEach(s => Object.values(s).forEach(m => { m.visible = false; }));
+      this.model.scale.setScalar((L * (this.spec.scale ?? 1)) / this.model.userData.height);
+      this.model.position.set(0, this.spec.top ?? 0.1, -(this.spec.back ?? 0));
+      return;
+    }
 
     this.torsoMesh.scale.set(girth * Math.max(0.9, hipRatio * 1.15), L, girth * depth);
     this.torsoMesh.position.set(0, -L / 2 - 0.02, 0);
@@ -197,7 +242,12 @@ export class Mannequin {
     const sMid = new THREE.Vector3().addVectors(p.ls, p.rs).multiplyScalar(0.5);
     const hMid = new THREE.Vector3().addVectors(p.lh, p.rh).multiplyScalar(0.5);
     placeSegment(P.torso, sMid, hMid, W * 0.3);
-    P.torso.scale.x = W * 0.42; // torso ovalado: más ancho que profundo
+    // Torso ovalado (más ancho que profundo) y girado con el cuerpo; si no, de perfil se ve más ancho que la ropa.
+    const X = new THREE.Vector3().subVectors(p.rs, p.ls).normalize();
+    const Y = new THREE.Vector3().subVectors(sMid, hMid);
+    Y.sub(X.clone().multiplyScalar(Y.dot(X))).normalize();
+    P.torso.quaternion.setFromRotationMatrix(tmpM.makeBasis(X, Y, new THREE.Vector3().crossVectors(X, Y)));
+    P.torso.scale.x = W * 0.42;
     placeSegment(P.neck, sMid, extra.head, W * 0.12);
     placeJoint(P.head, extra.head, W * 0.26);
     placeJoint(P.pelvis, hMid, W * 0.3);
